@@ -108,3 +108,5 @@ profiling binaries, Boost.program_options).
 |---|---|
 | M0 | `cmake --preset native-debug && ctest` in Docker: 1/1 passed (ASan + UBSan, GCC 13) |
 | M1 | Toy circuit x³+x+5=35: 3 constraints. Native prove 2.4 ms, verify 2.5–3.1 ms (includes processing the vk). Wasm: `zkauth_prover.wasm` 485,342 B (toy build), Chrome 156 Web Worker prove 22.3 ms, i.e. about 9× native on this tiny circuit. The browser proof verifies natively. A tampered public input (36 instead of 35) is rejected. |
+| M2 | `ZkAuthCircuit`: **280,670 constraints**, 255,817 variables, 8 public inputs (breakdown in how-it-works §4). Native, single thread: setup 15.0 s, prove 4.57 s, verify < 3.5 ms incl. vk processing. 25 test cases pass in release (49 s) and 24 under ASan + UBSan (191 s). |
+| M3 | `zkauth-setup`: pk.bin 148,499,473 B (65.0 MB of it is the R1CS), vk.bin 1,249 B, vk.json 2,836 B. `zkauth-issuer` tree: 20 dummies + 1 real credential at leaf 20, root `ec375622…3fd6`. The path verifies natively (`zkauth-issuer check`), and a native proof with that credential verifies (`zkauth-prove`: pk load 300 ms, witness 242 ms, prove 4,522 ms). |
