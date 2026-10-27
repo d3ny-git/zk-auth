@@ -164,6 +164,7 @@ $('prove-btn').onclick = async () => {
       ['public: nonce', pub.nonce],
       ['proof hash', result.proof_hash],
     ]));
+    for (const n of [5, 6]) { $(`step-${n}`).dataset.state = ''; show(n, ''); }
     enable(5);
   } catch (e) {
     fail(4, e.message);
@@ -171,6 +172,121 @@ $('prove-btn').onclick = async () => {
     $('prove-btn').disabled = false;
   }
 };
+
+// ---------------------------------------------------------------- step 5
+function workerCall(msg, replyType) {
+  return new Promise((resolve, reject) => {
+    worker.onmessage = ({ data }) => {
+      if (data.type === replyType) resolve(data.result);
+      else if (data.type === 'error') reject(new Error(data.message));
+    };
+    worker.postMessage(msg);
+  });
+}
+
+const utf8Hex = (s) => '0x' + [...new TextEncoder().encode(s)].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+// EIP-4361 text, built exactly as the server's parser expects it.
+function siweMessage({ domain, address, statement, uri, chainId, nonce, issuedAt }) {
+  return `${domain} wants you to sign in with your Ethereum account:\n${address}\n\n${statement}\n\n` +
+    `URI: ${uri}\nVersion: 1\nChain ID: ${chainId}\nNonce: ${nonce}\nIssued At: ${issuedAt}`;
+}
+
+$('sign-btn').onclick = async () => {
+  try {
+    setStep(5, 'busy');
+    // Wallets return lowercase addresses; SIWE needs EIP-55 casing, computed
+    // with OpenSSL's Keccak-256 inside the wasm module.
+    const { address } = await workerCall({ type: 'checksum', address: state.address }, 'checksum');
+    const message = siweMessage({
+      domain: location.host,
+      address,
+      // The wallet signs a hash of the exact proof and public inputs, which
+      // binds this proof to this wallet and this login.
+      statement: `Log in to Zk-Auth. zk-auth-proof:0x${state.proved.proof_hash}`,
+      uri: location.origin,
+      chainId: state.chainId,
+      nonce: state.server.nonce,
+      issuedAt: new Date().toISOString(),
+    });
+    const signature = await window.ethereum.request({ method: 'personal_sign', params: [utf8Hex(message), state.address] });
+    state.siwe = { message, signature, address };
+    setStep(5, 'done');
+    const warn = state.server.chain_id !== undefined && state.server.chain_id !== state.chainId
+      ? `<span class="bad">wallet is on chain ${state.chainId}, server expects ${state.server.chain_id}</span>\n` : '';
+    show(5, warn + `<pre>${escapeHtml(message)}</pre>` + table([['signature', signature]]) +
+      (params.has('debug')
+        ? `<details><summary>signature vector for tests/vectors/</summary><pre>${escapeHtml(JSON.stringify(
+          { message, address, signature, source: 'MetaMask extension personal_sign' }, null, 2))}</pre></details>` : ''));
+    enable(6);
+  } catch (e) {
+    fail(5, e.message);
+  }
+};
+
+// ---------------------------------------------------------------- step 6
+function loginBody() {
+  // Exactly these four fields. The credential (secret, date of birth) and the
+  // Merkle path never leave the browser; step 7 checks that.
+  return JSON.stringify({
+    proof: state.proved.proof,
+    public: state.proved.public,
+    siwe_message: state.siwe.message,
+    signature: state.siwe.signature,
+  });
+}
+
+async function postLogin(body) {
+  const r = await fetch(`${API}/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+  return { status: r.status, json: await r.json(), rejectedBy: r.headers.get('X-ZkAuth-Reject') };
+}
+window.__zk.postLogin = postLogin;
+
+$('login-btn').onclick = async () => {
+  try {
+    setStep(6, 'busy');
+    const body = loginBody();
+    state.sentBody = body;
+    const r = await postLogin(body);
+    showServerView(body);
+    if (r.status !== 200) throw new Error(`login rejected (HTTP ${r.status})${r.rejectedBy ? ` by check "${r.rejectedBy}"` : ''}`);
+    state.session = r.json;
+    const me = await fetch(`${API}/me`, { headers: { authorization: `Bearer ${r.json.token}` } });
+    const meJson = await me.json();
+    window.__zk.session = { login: r.json, me: meJson, meStatus: me.status };
+    setStep(6, 'done');
+    show(6, `<div class="stat">Logged in as ${escapeHtml(r.json.address)}</div>` + table([
+      ['token', `${r.json.token.slice(0, 40)}… (Ed25519 JWT)`],
+      ['expires', r.json.expires_at],
+      ['GET /me', JSON.stringify(meJson)],
+    ]));
+    $('attack-lab').hidden = false;
+  } catch (e) {
+    fail(6, e.message);
+  }
+};
+
+// ---------------------------------------------------------------- step 7
+function showServerView(body) {
+  const sent = JSON.parse(body);
+  const cred = JSON.parse(state.credential);
+  const keys = (o) => (o && typeof o === 'object') ? Object.keys(o).flatMap((k) => [k, ...keys(o[k])]) : [];
+  const allKeys = keys(sent);
+  const days = Math.round(Date.parse(cred.dob + 'T00:00:00Z') / 86_400_000);
+  const checks = [
+    ['top-level fields are exactly proof, public, siwe_message, signature',
+      JSON.stringify(Object.keys(sent).sort()) === '["proof","public","signature","siwe_message"]'],
+    ['no field named "dob" or "secret" anywhere', !allKeys.includes('dob') && !allKeys.includes('secret')],
+    ['the secret (64 hex) does not appear in the body', !body.includes(cred.secret)],
+    [`the date of birth (${'•'.repeat(4)}-••-••) does not appear in any form`,
+      !body.includes(cred.dob) && !body.includes(days.toString(16).padStart(8, '0')) && !body.includes(`"${days}"`)],
+    ['the Merkle path (leaf index, siblings) is not sent', !JSON.parse(state.path).siblings.some((s) => body.includes(s))],
+  ];
+  window.__zk.piiChecks = checks;
+  setStep(7, checks.every(([, ok]) => ok) ? 'done' : 'error');
+  show(7, checks.map(([what, ok]) => `<span class="${ok ? 'ok' : 'bad'}">${ok ? '✓' : '✗'} ${escapeHtml(what)}</span>`).join('\n') +
+    `\n<details><summary>exact request body (${body.length} bytes)</summary><pre>${escapeHtml(JSON.stringify(sent, null, 2))}</pre></details>`);
+}
 
 // The wasm module loads in the worker as soon as the page opens.
 worker.postMessage({ type: 'nullifier', secret: '00'.repeat(32), siteId: '00'.repeat(32) });

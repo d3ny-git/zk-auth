@@ -37,7 +37,38 @@ control an Ethereum wallet, which becomes your account identifier on the site.
 
 ## 2. The login, end to end
 
-*(Sequence diagram added at M6, when the full protocol runs.)*
+```mermaid
+sequenceDiagram
+    autonumber
+    participant I as Issuer (zkauth-issuer)
+    participant U as Browser page
+    participant W as Web Worker (wasm prover)
+    participant M as Wallet (MetaMask)
+    participant S as Server (Crow)
+
+    I-->>U: once, out of band: cred.json {secret, dob} + path.json
+    I-->>S: roots.json (published Merkle roots)
+    U->>M: eth_requestAccounts
+    M-->>U: address
+    U->>S: GET /nonce
+    S-->>U: {nonce, age_cutoff, site_id, issued_at}
+    U->>W: credential, path, server values
+    Note over W: download pk.bin once (Cache API),<br/>build witness, Groth16 prove (~10 s)
+    W-->>U: {proof, public, proof_hash}
+    U->>M: personal_sign(SIWE message with zk-auth-proof:0x<proof_hash>)
+    M-->>U: signature
+    U->>S: POST /login {proof, public, siwe_message, signature}
+    Note over S: 9 checks, cheapest first (§8)
+    S-->>U: {token (Ed25519 JWT), address, expires_at}
+    U->>S: GET /me (Authorization: Bearer token)
+    S-->>U: {sub, site, nul, iat, exp, jti}
+```
+
+Only the arrows into the server carry data off the device. The `/login` body
+has exactly four fields, and the PII-absence test captures it at the network
+layer and checks that neither the secret nor the date of birth (as text, as a
+day count, or as the hex used in the circuit) nor the Merkle path appears in
+it or in any other request.
 
 ## 3. zk-SNARKs from zero
 
@@ -445,7 +476,44 @@ message differently from what the wallet displayed to the user.
 
 ## 8. The server's check chain
 
-*(Written at M6.)*
+`AuthService::login` (`server/routes.cpp`) runs these checks in this order.
+Any failure answers `401 {"error":"authentication failed"}`. The precise
+reason goes only to the server log, and in development mode to an
+`X-ZkAuth-Reject` header, which the attack lab displays.
+
+| # | Check | Cost | Stops |
+|---|---|---|---|
+| 1 | body ≤ 16 KB, JSON with exactly 4 fields, points on curve and in subgroup, `packed` == recomputation | µs | junk, invalid-curve points, mismatched public inputs |
+| 2 | nonce exists, unexpired, **removed atomically** | µs (one mutex) | replay of a captured request |
+| 3 | SIWE: domain, URI, chain, issued-at ≤ 5 min old, nonce = proof's nonce, statement commits to `sha256(proof ‖ public)` | µs | phishing (signed for another site), stale signatures, swapping in another proof |
+| 4 | `site_id` and `age_cutoff` equal the server's own values | ns | proofs made for another site; an under-18 holder proving `dob ≤ <later date>` |
+| 5 | `merkle_root` ∈ published roots | ns | a tree the attacker built themselves |
+| 6 | Groth16 verification with the processed vk | ~1 ms | everything about the credential |
+| 7 | signer recovered from the signature == SIWE address | ~0.1 ms | someone else's wallet |
+| 8 | nullifier unseen, or bound to the same address | µs | one credential opening several accounts |
+| 9 | issue the token | µs | — |
+
+**Why this order?** Rejecting junk should cost less than accepting a real
+login, or a flood of garbage becomes a denial-of-service attack. The pairing
+check (6) is by far the most expensive step, so everything that can be
+checked with a hash-table lookup or a string comparison runs first. Within
+that, the nonce (2) is consumed before anything that depends on secret-free
+but attacker-chosen data (3–8). A failed attempt therefore burns the nonce:
+an attacker cannot reuse one nonce to probe the later checks again and
+again. The nullifier (8) is bound only after both cryptographic checks pass.
+Otherwise someone could "squat" a victim's nullifier with an invalid proof.
+
+**Why is the nonce stored with its age cutoff?** If the date changes between
+`GET /nonce` and `POST /login`, "today minus 18 years" changes too. The
+server remembers which cutoff it handed out with each nonce and checks
+against that, so a login across midnight UTC does not fail spuriously.
+
+**Thread safety.** Crow runs one handler per worker thread. Nonces and
+nullifiers live in 64-way sharded hash maps (one mutex per shard), and the
+known roots are an immutable set swapped atomically when `roots.json`
+changes. OpenSSL contexts (Keccak, secp256k1) are per thread
+(`thread_local`). The processed verification key is read-only, and libff's
+profiling globals are disabled before any thread starts.
 
 ## 9. The attack lab
 

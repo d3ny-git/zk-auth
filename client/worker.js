@@ -3,6 +3,7 @@
 //
 // Messages in:  {type: 'prove', credential, path, server}   (JSON strings)
 //               {type: 'nullifier', secret, siteId}
+//               {type: 'checksum', address}          EIP-55 via OpenSSL KECCAK-256
 // Messages out: {type: 'progress', phase, loaded, total}
 //               {type: 'proved', result}   result = {proof, public, proof_hash, timings}
 //               {type: 'error', message, kind}
@@ -60,6 +61,10 @@ self.onmessage = async ({ data }) => {
     const prover = await proverReady;
     if (data.type === 'nullifier') {
       post({ type: 'nullifier', result: JSON.parse(prover.compute_nullifier(data.secret, data.siteId)) });
+      return;
+    }
+    if (data.type === 'checksum') {
+      post({ type: 'checksum', result: JSON.parse(prover.checksum_address(data.address)) });
       return;
     }
     if (data.type !== 'prove') return;

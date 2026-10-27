@@ -96,3 +96,46 @@ export async function installMockWallet(page, wallet = Wallet.createRandom(), ch
   });
   return wallet;
 }
+
+// Runs the native tools from build/native-release.
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { createServer as createNetServer } from 'node:net';
+
+const tools = `${repoRoot}build/native-release`;
+export const runTool = (bin, args) => execFileSync(`${tools}/tools/${bin}`, args, { encoding: 'utf8' });
+
+// A fresh issuer state with 20 dummies and one real credential.
+export function freshIssuer(dob = '2001-05-14') {
+  const dir = mkdtempSync(join(tmpdir(), 'zk-issuer-'));
+  runTool('zkauth-issuer', ['init', '--state', dir, '--dummies', '20']);
+  runTool('zkauth-issuer', ['new', '--state', dir, '--dob', dob, '--out', `${dir}/cred.json`]);
+  runTool('zkauth-issuer', ['root', '--state', dir]);
+  runTool('zkauth-issuer', ['path', '--state', dir, '--index', '20', '--out', `${dir}/path.json`]);
+  return dir;
+}
+
+export function freePort() {
+  return new Promise((resolve) => {
+    const s = createNetServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); });
+  });
+}
+
+// Starts zkauth-server and resolves once /health answers.
+export async function startServer({ port, domain, uri, roots, mode = 'development', extra = [] }) {
+  const dir = mkdtempSync(join(tmpdir(), 'zk-server-'));
+  const proc = spawn(`${tools}/server/zkauth-server`, [
+    '--port', String(port), '--bind', '127.0.0.1', '--domain', domain, '--uri', uri,
+    '--vk', `${repoRoot}keys/vk.bin`, '--roots', roots, '--session-key', `${dir}/session.pem`,
+    '--mode', mode, ...extra,
+  ], { stdio: ['ignore', 'inherit', 'pipe'] });
+  const log = [];
+  proc.stderr.on('data', (d) => log.push(String(d)));
+  for (let i = 0; i < 100; i++) {
+    try { if ((await fetch(`http://127.0.0.1:${port}/health`)).ok) return { proc, log, stop: () => proc.kill() }; } catch {}
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  proc.kill();
+  throw new Error(`zkauth-server did not start:\n${log.join('')}`);
+}

@@ -2,6 +2,7 @@
 //
 //   prove(pk_bytes, credential_json, path_json, public_json) -> proof_json
 //   compute_nullifier(secret_hex, site_id_hex)                -> nullifier_json
+//   checksum_address(address_hex)                              -> {"address": EIP-55}
 //   version()                                                  -> version_json
 //
 // Every function returns a JSON string. Errors come back as {"error": "..."}
@@ -19,6 +20,8 @@
 #include <string>
 
 #include <libff/common/profiling.hpp>
+
+#include <openssl/evp.h>
 
 #include "core/prover.hpp"
 #include "core/toy_circuit.hpp"
@@ -162,6 +165,25 @@ std::string selftest_field(int iterations) {
     });
 }
 
+// EIP-55 checksum casing of a 20-byte address, using OpenSSL's KECCAK-256
+// (the browser's WebCrypto has no Keccak). EIP-4361 requires this form in the
+// SIWE message, and wallets return lowercase addresses.
+std::string checksum_address(const std::string& address) {
+    return guarded([&] {
+        const Bytes a = from_eth_hex(address, 20);
+        std::string hex = to_hex(a);
+        EVP_MD* md = EVP_MD_fetch(nullptr, "KECCAK-256", nullptr);
+        unsigned char h[32];
+        unsigned int len = 0;
+        const bool ok = md && EVP_Digest(hex.data(), hex.size(), h, &len, md, nullptr) == 1 && len == 32;
+        EVP_MD_free(md);
+        if (!ok) throw FormatError("KECCAK-256 unavailable");
+        for (std::size_t i = 0; i < hex.size(); ++i)
+            if (hex[i] >= 'a' && ((h[i / 2] >> (i % 2 == 0 ? 4 : 0)) & 0xf) >= 8) hex[i] = char(hex[i] - 'a' + 'A');
+        return json{{"address", "0x" + hex}};
+    });
+}
+
 std::string compute_nullifier(const std::string& secret_hex, const std::string& site_id_hex) {
     return guarded([&] {
         return json{{"nullifier", to_hex(nullifier_of(digest_from_hex(secret_hex), digest_from_hex(site_id_hex)))}};
@@ -203,6 +225,7 @@ std::string version() {
 EMSCRIPTEN_BINDINGS(zkauth_prover) {
     emscripten::function("prove", &prove);
     emscripten::function("compute_nullifier", &compute_nullifier);
+    emscripten::function("checksum_address", &checksum_address);
     emscripten::function("version", &version);
     emscripten::function("toyProve", &toy_prove);
     emscripten::function("debug_witness", &debug_witness);
