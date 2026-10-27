@@ -1,0 +1,67 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": { "CMAKE_EXPORT_COMPILE_COMMANDS": "ON" }
+    },
+    {
+      "name": "native-debug",
+      "inherits": "base",
+      "displayName": "Native debug, ASan + UBSan",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "ZK_SANITIZE": "ON" }
+    },
+    {
+      "name": "native-release",
+      "inherits": "base",
+      "displayName": "Native release (server, CLIs, benchmarks)",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "native-fuzz",
+      "inherits": "base",
+      "displayName": "libFuzzer targets (clang)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "ZK_FUZZ": "ON",
+        "ZK_BUILD_BENCH": "OFF"
+      }
+    },
+    {
+      "name": "wasm",
+      "inherits": "base",
+      "displayName": "WebAssembly prover (Emscripten)",
+      "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ZK_GMP_WASM_PREFIX": "${sourceDir}/build/gmp-wasm"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "native-debug", "configurePreset": "native-debug" },
+    { "name": "native-release", "configurePreset": "native-release" },
+    { "name": "native-fuzz", "configurePreset": "native-fuzz" },
+    { "name": "wasm", "configurePreset": "wasm" }
+  ],
+  "testPresets": [
+    {
+      "name": "native-debug",
+      "configurePreset": "native-debug",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    {
+      "name": "native-release",
+      "configurePreset": "native-release",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    }
+  ]
+}

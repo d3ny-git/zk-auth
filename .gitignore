@@ -1,0 +1,27 @@
+# build trees
+/build/
+/out/
+compile_commands.json
+.cache/
+
+# generated keys, trees, credentials, session-signing keys — never commit
+/keys/
+/data/
+*.pem
+cred*.json
+path*.json
+!tests/vectors/*.json
+
+# generated web artefacts (built from prover-wasm/)
+/client/wasm/
+
+# node / python
+node_modules/
+__pycache__/
+.venv/
+
+# fuzzing corpora are regenerated locally
+/fuzz-corpus/
+crash-*
+leak-*
+timeout-*
