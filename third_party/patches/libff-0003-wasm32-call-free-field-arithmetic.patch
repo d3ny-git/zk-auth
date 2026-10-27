@@ -1,0 +1,183 @@
+--- a/libff/algebra/fields/fp.tcc
++++ b/libff/algebra/fields/fp.tcc
+@@ -16,12 +16,20 @@
+ 
+ #include <libff/algebra/fields/field_utils.hpp>
+ #include <libff/algebra/fields/fp_aux.tcc>
++#include <libff/algebra/fields/fp_wasm32.tcc>
+ 
+ namespace libff {
+ 
+ template<mp_size_t n, const bigint<n>& modulus>
+ void Fp_model<n,modulus>::mul_reduce(const bigint<n> &other)
+ {
++#if defined(__EMSCRIPTEN__) && GMP_NUMB_BITS == 32
++    if (n == 8)
++    { /* zk-auth: call-free CIOS for 8 x 32-bit limbs (see fp_wasm32.tcc) */
++        wasm32::mont_mul_8(this->mont_repr.data, other.data, modulus.data, inv);
++        return;
++    }
++#endif
+     /* stupid pre-processor tricks; beware */
+ #if defined(__x86_64__) && defined(USE_ASM)
+     if (n == 3)
+@@ -320,6 +328,13 @@
+ #ifdef PROFILE_OP_COUNTS
+     this->add_cnt++;
+ #endif
++#if defined(__EMSCRIPTEN__) && GMP_NUMB_BITS == 32
++    if (n == 8)
++    { /* zk-auth: see fp_wasm32.tcc */
++        wasm32::add_mod_8(this->mont_repr.data, other.mont_repr.data, modulus.data);
++        return *this;
++    }
++#endif
+ #if defined(__x86_64__) && defined(USE_ASM)
+     if (n == 3)
+     {
+@@ -437,6 +452,13 @@
+ #ifdef PROFILE_OP_COUNTS
+     this->sub_cnt++;
+ #endif
++#if defined(__EMSCRIPTEN__) && GMP_NUMB_BITS == 32
++    if (n == 8)
++    { /* zk-auth: see fp_wasm32.tcc */
++        wasm32::sub_mod_8(this->mont_repr.data, other.mont_repr.data, modulus.data);
++        return *this;
++    }
++#endif
+ #if defined(__x86_64__) && defined(USE_ASM)
+     if (n == 3)
+     {
+--- /dev/null
++++ b/libff/algebra/fields/fp_wasm32.tcc
+@@ -0,0 +1,129 @@
++/** @file
++ *****************************************************************************
++ zk-auth addition: fast paths for 256-bit prime fields stored as 8 x 32-bit
++ GMP limbs, i.e. the wasm32 build (GMP --host=none, no assembly).
++
++ The generic code in fp.tcc spends most of its time in calls into GMP's
++ generic mpn_* functions (mpn_mul_n, 8 x mpn_addmul_1, 8 x mpn_add_1,
++ mpn_cmp, mpn_copyi, ...) for every field multiplication. Here the same
++ arithmetic is written out with 64-bit accumulators, which wasm executes
++ natively (i64.mul), and no calls:
++
++   mont_mul_8  CIOS Montgomery multiplication (Koc, Acar, Kaliski 1996)
++   add_mod_8   a + b mod p
++   sub_mod_8   a - b mod p
++
++ Inputs are fully reduced (< p), as everywhere in Fp_model.
++ *****************************************************************************/
++#ifndef FP_WASM32_TCC_
++#define FP_WASM32_TCC_
++
++#include <cstdint>
++
++namespace libff {
++namespace wasm32 {
++
++static_assert(sizeof(mp_limb_t) == 4 || GMP_NUMB_BITS != 32, "expects 32-bit limbs");
++
++/* a <- a * b * 2^-256 mod p,  inv = -p^-1 mod 2^32 */
++inline void mont_mul_8(mp_limb_t *a, const mp_limb_t *b, const mp_limb_t *p, const mp_limb_t inv)
++{
++    uint32_t t[10] = {0};
++    for (int i = 0; i < 8; ++i)
++    {
++        /* t += a * b[i] */
++        const uint64_t bi = b[i];
++        uint64_t c = 0;
++        for (int j = 0; j < 8; ++j)
++        {
++            c = (uint64_t)t[j] + (uint64_t)a[j] * bi + (c >> 32);
++            t[j] = (uint32_t)c;
++        }
++        c = (uint64_t)t[8] + (c >> 32);
++        t[8] = (uint32_t)c;
++        t[9] = (uint32_t)(c >> 32);
++
++        /* t = (t + m * p) / 2^32, with m chosen so the low limb cancels */
++        const uint64_t m = (uint32_t)(t[0] * (uint32_t)inv);
++        c = (uint64_t)t[0] + m * p[0];
++        for (int j = 1; j < 8; ++j)
++        {
++            c = (uint64_t)t[j] + m * p[j] + (c >> 32);
++            t[j - 1] = (uint32_t)c;
++        }
++        c = (uint64_t)t[8] + (c >> 32);
++        t[7] = (uint32_t)c;
++        t[8] = t[9] + (uint32_t)(c >> 32);
++    }
++
++    /* t < 2p: subtract p once if t >= p */
++    uint32_t d[8];
++    uint64_t borrow = 0;
++    for (int j = 0; j < 8; ++j)
++    {
++        const uint64_t x = (uint64_t)t[j] - p[j] - borrow;
++        d[j] = (uint32_t)x;
++        borrow = (x >> 32) & 1;
++    }
++    const bool take_d = t[8] != 0 || borrow == 0;
++    for (int j = 0; j < 8; ++j)
++    {
++        a[j] = take_d ? d[j] : t[j];
++    }
++}
++
++/* a <- a + b mod p */
++inline void add_mod_8(mp_limb_t *a, const mp_limb_t *b, const mp_limb_t *p)
++{
++    uint32_t s[8], d[8];
++    uint64_t c = 0;
++    for (int j = 0; j < 8; ++j)
++    {
++        c = (uint64_t)a[j] + b[j] + (c >> 32);
++        s[j] = (uint32_t)c;
++    }
++    const uint32_t carry = (uint32_t)(c >> 32);
++    uint64_t borrow = 0;
++    for (int j = 0; j < 8; ++j)
++    {
++        const uint64_t x = (uint64_t)s[j] - p[j] - borrow;
++        d[j] = (uint32_t)x;
++        borrow = (x >> 32) & 1;
++    }
++    const bool take_d = carry != 0 || borrow == 0;
++    for (int j = 0; j < 8; ++j)
++    {
++        a[j] = take_d ? d[j] : s[j];
++    }
++}
++
++/* a <- a - b mod p */
++inline void sub_mod_8(mp_limb_t *a, const mp_limb_t *b, const mp_limb_t *p)
++{
++    uint32_t d[8];
++    uint64_t borrow = 0;
++    for (int j = 0; j < 8; ++j)
++    {
++        const uint64_t x = (uint64_t)a[j] - b[j] - borrow;
++        d[j] = (uint32_t)x;
++        borrow = (x >> 32) & 1;
++    }
++    if (borrow)
++    {
++        uint64_t c = 0;
++        for (int j = 0; j < 8; ++j)
++        {
++            c = (uint64_t)d[j] + p[j] + (c >> 32);
++            d[j] = (uint32_t)c;
++        }
++    }
++    for (int j = 0; j < 8; ++j)
++    {
++        a[j] = d[j];
++    }
++}
++
++} // wasm32
++} // libff
++
++#endif // FP_WASM32_TCC_

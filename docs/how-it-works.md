@@ -295,7 +295,64 @@ circuit variable, which the prover combines with the witness values in large
 **multi-scalar multiplications**. 65 MB of it is the R1CS itself, which the
 prover needs to compute the quotient polynomial `h(x)`.
 
-*(Download, caching and the real proving time: M4.)*
+`client/worker.js` downloads it once with a progress bar and stores it in the
+browser's **Cache API** under a URL containing its SHA-256 (from
+`keys/manifest.json`). A new trusted setup therefore invalidates the cached
+copy automatically. Every load is checked against that hash before it
+reaches the prover. Parsing the 148.5 MB into libsnark objects takes about
+0.44 s, and the parsed key then stays in the worker's wasm memory for further
+proofs.
+
+### What the prover actually does, and where the time goes
+
+A Groth16 proof is three curve points built from the witness `w` (all 255,817
+wire values):
+
+1. **Witness** (0.4 s in the browser): run the circuit's
+   `generate_r1cs_witness`, i.e. evaluate 10 SHA-256 compressions bit by bit.
+2. **Quotient polynomial `h(x)`** (3.4 s): interpolate the constraint
+   polynomials `A·w, B·w, C·w` over an evaluation domain of 2¹⁸ + 2¹⁵ points
+   and divide by the vanishing polynomial. This is about seven FFTs over Fr.
+3. **Multi-scalar multiplications** (6.2 s): `Σ wᵢ·Aᵢ`, `Σ wᵢ·Bᵢ` (in G2),
+   `Σ hᵢ·Hᵢ`, `Σ wᵢ·Lᵢ`. Most `wᵢ` are bits, so libsnark skips the zeros
+   and adds the ones directly (about 98% of A/L entries). The `H` sum has
+   294,911 full 254-bit scalars and dominates (5.5 s, bucketed Pippenger
+   method).
+4. **Blinding**: add `r·δ` and `s·δ` with fresh random `r, s`. This is what
+   makes the proof zero-knowledge.
+
+Measured in Chrome 156: **10.3–10.5 s**, against 4.4 s for the same code
+natively.
+
+### Two bugs that only appeared in the browser, and what they teach
+
+* **`long` is not 64 bits everywhere.** libsnark stored SHA-256's round
+  constants in a `long`. On wasm32 `long` is 32 bits, so half the constants
+  became negative field elements. The browser's circuit was self-consistent
+  and even produced correct hashes (the error cancels modulo 2³²), but its
+  coefficients no longer matched the constraint system inside the proving key.
+  So every proof was invalid. The tool that found it compares the two
+  constraint systems directly: they diverged at constraint 9,922 of 280,670.
+* **Inline asm is a contract with the compiler.** The *native verifier*
+  rejected about 2/3 of valid proofs. libff sorts public-input scalars in a
+  heap with an x86-64 asm comparison that was not `volatile` and did not say
+  it reads memory, so GCC 16 at `-O3` reused stale comparison results. The
+  browser (no asm) was right and the server was wrong. The lesson: a verifier
+  needs randomised tests too. Fixed-value tests had passed for weeks of
+  upstream history.
+
+### Making WebAssembly fast enough
+
+The first browser measurement was 42.4 s, 9.6× native in *every* phase.
+Uniform slowness points at the innermost primitive, the 256-bit modular
+multiplication. Natively, libff uses hand-written x86-64 assembly. In wasm it
+fell back to generic code that makes about 20 calls into GMP per
+multiplication. `fp_wasm32.tcc` (patch libff-0003) writes the same Montgomery
+multiplication (the CIOS variant) as straight-line C++ over 8 × 32-bit limbs
+with 64-bit accumulators. The browser executes those as native `i64.mul`, so
+proving dropped to 10.4 s. Correctness is checked against an independent
+big-integer reference (1.2 M random operations) and by verifying browser
+proofs natively.
 
 ## 7. Ethereum signatures and address recovery
 

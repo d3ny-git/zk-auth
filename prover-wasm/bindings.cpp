@@ -123,6 +123,45 @@ void set_profiling(bool on) {
     libff::inhibit_profiling_counters = !on;
 }
 
+// Self-test of the wasm32 field fast paths (patch libff-0003) against an
+// independent GMP mpz reference on the raw Montgomery representations:
+//   mul: A*B*R^-1 mod p,  add: A+B mod p,  sub: A-B mod p,  R = 2^256.
+template <class F>
+long field_selftest(long iterations) {
+    auto to_mpz = [](mpz_t z, const libff::bigint<F::num_limbs>& b) { b.to_mpz(z); };
+    mpz_t p, rinv, a, b, want, got;
+    mpz_inits(p, rinv, a, b, want, got, nullptr);
+    F::field_char().to_mpz(p);
+    mpz_set_ui(rinv, 1);
+    mpz_mul_2exp(rinv, rinv, 256);
+    mpz_invert(rinv, rinv, p);
+    long bad = 0;
+    for (long i = 0; i < iterations; ++i) {
+        F x = F::random_element(), y = F::random_element();
+        if (i % 7 == 0) y = x;                        // squaring path
+        if (i % 11 == 0) y = -x;                      // add -> 0, sub -> 2x
+        to_mpz(a, x.mont_repr);
+        to_mpz(b, y.mont_repr);
+        F prod = x * y, sum = x + y, diff = x - y;
+        mpz_mul(want, a, b); mpz_mul(want, want, rinv); mpz_mod(want, want, p);
+        to_mpz(got, prod.mont_repr); bad += mpz_cmp(want, got) != 0;
+        mpz_add(want, a, b); mpz_mod(want, want, p);
+        to_mpz(got, sum.mont_repr); bad += mpz_cmp(want, got) != 0;
+        mpz_sub(want, a, b); mpz_mod(want, want, p);
+        to_mpz(got, diff.mont_repr); bad += mpz_cmp(want, got) != 0;
+    }
+    mpz_clears(p, rinv, a, b, want, got, nullptr);
+    return bad;
+}
+
+std::string selftest_field(int iterations) {
+    return guarded([&] {
+        return json{{"iterations", iterations},
+                    {"Fr_mismatches", field_selftest<Fr>(iterations)},
+                    {"Fq_mismatches", field_selftest<Fq>(iterations)}};
+    });
+}
+
 std::string compute_nullifier(const std::string& secret_hex, const std::string& site_id_hex) {
     return guarded([&] {
         return json{{"nullifier", to_hex(nullifier_of(digest_from_hex(secret_hex), digest_from_hex(site_id_hex)))}};
@@ -170,4 +209,5 @@ EMSCRIPTEN_BINDINGS(zkauth_prover) {
     emscripten::function("debug_parts", &debug_parts);
     emscripten::function("debug_arith", &debug_arith_js);
     emscripten::function("set_profiling", &set_profiling);
+    emscripten::function("selftest_field", &selftest_field);
 }
