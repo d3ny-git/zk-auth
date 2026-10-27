@@ -356,7 +356,92 @@ proofs natively.
 
 ## 7. Ethereum signatures and address recovery
 
-*(Written at M5.)*
+The zk proof says *"some adult holds a credential"*. The signature adds *"and
+it is the owner of wallet 0x…"*, and the login binds the two together. All of
+it is done with OpenSSL in `server/eth_sig.cpp`; no Ethereum library is
+involved.
+
+**Keys and addresses.** An Ethereum account is a secp256k1 key pair: a
+private scalar `d` and the public point `Q = d·G`. The *address* is the last
+20 bytes of `keccak256(X ‖ Y)`, the hash of the 64-byte uncompressed point.
+Keccak-256 is the pre-standard version of SHA-3 with a different padding
+byte. OpenSSL calls it `KECCAK-256` (available since 3.2) and it is **not**
+`SHA3-256`; a test checks that the two differ on the empty string. Addresses
+are usually written in EIP-55 mixed case, where the case of each letter
+encodes one bit of `keccak256(lowercase hex)`. This is a typo detector, and
+the parser rejects a mixed-case address whose case is wrong.
+
+**What MetaMask signs.** `personal_sign` never signs your text directly. It
+signs `keccak256("\x19Ethereum Signed Message:\n" + len + text)` (EIP-191).
+The `\x19` prefix guarantees the bytes can never be a valid Ethereum
+transaction, so a login signature cannot be replayed as a payment. Note that
+`len` counts UTF-8 *bytes*; one of the vectors uses `"Grüße, 世界 — ✓"` to
+check that.
+
+**Recovering the signer instead of looking it up.** An ECDSA signature is
+`(r, s)`. `r` is the x-coordinate of a random point `R = k·G`, and
+`s = k⁻¹(e + r·d) mod n`, where `e` is the digest. Rearranging gives
+`Q = r⁻¹(s·R − e·G)`. So from `(r, s)` and the digest we can *recompute* the
+public key, provided we know which of the two points with x = r was `R`. That
+one bit is `v` (27 → even y, 28 → odd y). The server therefore needs no key
+registry: it recovers `Q`, hashes it to an address, and compares that with
+the address in the SIWE message.
+
+Step by step with real numbers (the vector from MetaMask's eth-sig-util:
+key `4af1…8bb0` signs `Hello, world!`; test `[example]`):
+
+```
+signed bytes  "\x19Ethereum Signed Message:\n13Hello, world!"
+digest e      b453bd4e271eed985cbab8231da609c4ce0a9cf1f763b6c1594e76315510e0f1
+r             90a938f7457df6e8f741264c32697fc52f9a8f867c52dd70713d9d2d472f2e41
+s             5d9c94148991bbe1f4a1818d1dff09165782749c877f5cf1eff4ef126e55714d
+v             28  → R = the point with x = r and odd y
+Q = r⁻¹(sR−eG) 9e9e45b2…dc5acd79 ‖ d0dfeea9…9478903a        (X ‖ Y, 64 bytes)
+keccak256(Q)  ba8ee2251943767535685e5f 29c76e6ad8f28bb1004902578fb108c507be341b
+address       0x29C76e6aD8f28BB1004902578Fb108c507Be341b   (last 20 bytes, EIP-55 cased)
+```
+
+In OpenSSL: `EC_POINT_set_compressed_coordinates(group, R, r, v & 1)` builds
+`R` and fails if `r` is not an x-coordinate on the curve. Then a single
+`EC_POINT_mul(group, Q, u1, R, u2)` computes `u1·G + u2·R` with
+`u1 = −e·r⁻¹`, `u2 = s·r⁻¹ (mod n)`.
+
+**What gets rejected, and why** (each is a test in `tests/test_eth_sig.cpp`):
+
+| Check | Attack it stops |
+|---|---|
+| `r, s ∈ [1, n−1]` | garbage that is not an ECDSA signature at all |
+| `s ≤ n/2` (EIP-2 low-s) | malleability: `(r, n−s)` with flipped `v` is a *second* valid encoding of the same signature |
+| `v ∈ {27, 28}` (or 0/1) | recovery ids 2/3 (`r ≥ n` cases) never produced by wallets |
+| `r` must be on the curve | crafted `r` with no point |
+| `Q ≠ ∞` | crafted `(r, s)` that "recover" the point at infinity |
+| recovered address == SIWE address | anyone else's signature |
+
+The implementation is cross-checked against bitcoin-core's libsecp256k1 (the
+library Bitcoin runs on): 10,000 random keys sign random messages there, and
+`server/eth_sig.cpp` recovers the same address every time, in both the 27/28
+and 0/1 forms of `v`.
+
+**SIWE (EIP-4361)** turns "sign this hash" into a human-readable message the
+wallet shows the user:
+
+```
+localhost:8080 wants you to sign in with your Ethereum account:
+0xFCAd0B19bB29D4674531d6f115237E16AfCE377c
+
+Log in to Zk-Auth. zk-auth-proof:0x<sha256 of the proof and public inputs>
+
+URI: http://localhost:8080
+Version: 1
+Chain ID: 1
+Nonce: 0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f
+Issued At: 2026-10-27T12:00:00.000Z
+```
+
+`server/siwe.cpp` parses this grammar strictly: exact line structure, no CR,
+no trailing newline, fields in order, EIP-55 address, nonce ≥ 8 alphanumeric
+characters, RFC 3339 times. Anything looser could let the server interpret a
+message differently from what the wallet displayed to the user.
 
 ## 8. The server's check chain
 

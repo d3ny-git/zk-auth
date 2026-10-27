@@ -1,0 +1,26 @@
+[
+  {
+    "message": "Hello, world!",
+    "address": "0x29C76e6aD8f28BB1004902578Fb108c507Be341b",
+    "signature": "0x90a938f7457df6e8f741264c32697fc52f9a8f867c52dd70713d9d2d472f2e415d9c94148991bbe1f4a1818d1dff09165782749c877f5cf1eff4ef126e55714d1c",
+    "source": "@metamask/eth-sig-util personalSign"
+  },
+  {
+    "message": "localhost:8080 wants you to sign in with your Ethereum account:\n0xFCAd0B19bB29D4674531d6f115237E16AfCE377c\n\nLog in to Zk-Auth. zk-auth-proof:0x5a1e2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8\n\nURI: http://localhost:8080\nVersion: 1\nChain ID: 1\nNonce: 0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f\nIssued At: 2026-10-27T12:00:00.000Z",
+    "address": "0xFCAd0B19bB29D4674531d6f115237E16AfCE377c",
+    "signature": "0x82c143aa08e509dbbb08d461fb0e38c8dbc941a86fd4b907382913fb82a615cf0bc6b86c6ccc66a5ef08c5a72bb7a9ab950696dee5f2ec759514e5e804138cec1c",
+    "source": "@metamask/eth-sig-util personalSign"
+  },
+  {
+    "message": "Grüße, 世界 — ✓",
+    "address": "0x1d3fC0F37760080AD446565C7B68620A99A36E9E",
+    "signature": "0xa545371e5e986777bc208aea2c0758d4fb81d394c4d59f81740cec1b85127154521754b4e8a53edaacf0c450f1af0d294232d8f77fa42d1b1f5f78b8c36701db1c",
+    "source": "@metamask/eth-sig-util personalSign"
+  },
+  {
+    "message": "",
+    "address": "0x06AB2F9C4Dc31a08c4ECe055d2Fc8b1Eca6D6f65",
+    "signature": "0xf24cf3aef5222e2b7ed132c1d21f2536f0122f177c39ddf750283db8cc8c25a665a88a1360740822c8c63030b8ee9c00748cb17130e5ca1981d6726ec4aee9ce1c",
+    "source": "@metamask/eth-sig-util personalSign"
+  }
+]
