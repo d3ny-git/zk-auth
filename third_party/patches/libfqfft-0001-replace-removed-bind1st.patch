@@ -1,0 +1,30 @@
+diff --git a/libfqfft/polynomial_arithmetic/basic_operations.tcc b/libfqfft/polynomial_arithmetic/basic_operations.tcc
+index 5459f70..eca2c84 100755
+--- a/libfqfft/polynomial_arithmetic/basic_operations.tcc
++++ b/libfqfft/polynomial_arithmetic/basic_operations.tcc
+@@ -148,7 +148,7 @@ void _polynomial_multiplication_on_fft(std::vector<FieldT> &c, const std::vector
+ #endif
+ 
+     const FieldT sconst = FieldT(n).inverse();
+-    std::transform(c.begin(), c.end(), c.begin(), std::bind1st(std::multiplies<FieldT>(), sconst));
++    std::transform(c.begin(), c.end(), c.begin(), [&](const FieldT &v) { return sconst * v; });
+     _condense(c);
+ }
+ 
+diff --git a/libfqfft/polynomial_arithmetic/xgcd.tcc b/libfqfft/polynomial_arithmetic/xgcd.tcc
+index f1ace4b..0621dd6 100755
+--- a/libfqfft/polynomial_arithmetic/xgcd.tcc
++++ b/libfqfft/polynomial_arithmetic/xgcd.tcc
+@@ -58,9 +58,9 @@ void _polynomial_xgcd(const std::vector<FieldT> &a, const std::vector<FieldT> &b
+     _polynomial_division(V1, R, V3, b);
+ 
+     FieldT lead_coeff = G.back().inverse();
+-    std::transform(G.begin(), G.end(), G.begin(), std::bind1st(std::multiplies<FieldT>(), lead_coeff));
+-    std::transform(U.begin(), U.end(), U.begin(), std::bind1st(std::multiplies<FieldT>(), lead_coeff));
+-    std::transform(V1.begin(), V1.end(), V1.begin(), std::bind1st(std::multiplies<FieldT>(), lead_coeff));
++    std::transform(G.begin(), G.end(), G.begin(), [&](const FieldT &v) { return lead_coeff * v; });
++    std::transform(U.begin(), U.end(), U.begin(), [&](const FieldT &v) { return lead_coeff * v; });
++    std::transform(V1.begin(), V1.end(), V1.begin(), [&](const FieldT &v) { return lead_coeff * v; });
+ 
+     g = G;
+     u = U;

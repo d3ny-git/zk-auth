@@ -25,3 +25,6 @@ __pycache__/
 crash-*
 leak-*
 timeout-*
+
+# e2e outputs
+/tests/e2e/screenshots/

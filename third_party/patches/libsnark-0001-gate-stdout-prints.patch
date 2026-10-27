@@ -1,0 +1,125 @@
+diff --git a/libsnark/knowledge_commitment/kc_multiexp.tcc b/libsnark/knowledge_commitment/kc_multiexp.tcc
+index 6ca3a19..fec069f 100644
+--- a/libsnark/knowledge_commitment/kc_multiexp.tcc
++++ b/libsnark/knowledge_commitment/kc_multiexp.tcc
+@@ -87,9 +87,9 @@ knowledge_commitment<T1, T2> kc_multi_exp_with_mixed_addition(const knowledge_co
+         ++value_it;
+     }
+ 
+-    libff::print_indent(); printf("* Elements of w skipped: %zu (%0.2f%%)\n", num_skip, 100.*num_skip/(num_skip+num_add+num_other));
+-    libff::print_indent(); printf("* Elements of w processed with special addition: %zu (%0.2f%%)\n", num_add, 100.*num_add/(num_skip+num_add+num_other));
+-    libff::print_indent(); printf("* Elements of w remaining: %zu (%0.2f%%)\n", num_other, 100.*num_other/(num_skip+num_add+num_other));
++    if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* Elements of w skipped: %zu (%0.2f%%)\n", num_skip, 100.*num_skip/(num_skip+num_add+num_other)); }
++    if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* Elements of w processed with special addition: %zu (%0.2f%%)\n", num_add, 100.*num_add/(num_skip+num_add+num_other)); }
++    if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* Elements of w remaining: %zu (%0.2f%%)\n", num_other, 100.*num_other/(num_skip+num_add+num_other)); }
+     libff::leave_block("Process scalar vector");
+ 
+     return acc + libff::multi_exp<knowledge_commitment<T1, T2>, FieldT, Method>(g.begin(), g.end(), p.begin(), p.end(), chunks);
+diff --git a/libsnark/relations/constraint_satisfaction_problems/r1cs/r1cs.tcc b/libsnark/relations/constraint_satisfaction_problems/r1cs/r1cs.tcc
+index 23b89fb..3b9b2af 100644
+--- a/libsnark/relations/constraint_satisfaction_problems/r1cs/r1cs.tcc
++++ b/libsnark/relations/constraint_satisfaction_problems/r1cs/r1cs.tcc
+@@ -224,7 +224,7 @@ void r1cs_constraint_system<FieldT>::swap_AB_if_beneficial()
+     }
+     else
+     {
+-        libff::print_indent(); printf("Swap is not beneficial, not performing\n");
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("Swap is not beneficial, not performing\n"); }
+     }
+ 
+     libff::leave_block("Call to r1cs_constraint_system::swap_AB_if_beneficial");
+diff --git a/libsnark/zk_proof_systems/ppzksnark/r1cs_gg_ppzksnark/r1cs_gg_ppzksnark.hpp b/libsnark/zk_proof_systems/ppzksnark/r1cs_gg_ppzksnark/r1cs_gg_ppzksnark.hpp
+index b6bd268..174f810 100644
+--- a/libsnark/zk_proof_systems/ppzksnark/r1cs_gg_ppzksnark/r1cs_gg_ppzksnark.hpp
++++ b/libsnark/zk_proof_systems/ppzksnark/r1cs_gg_ppzksnark/r1cs_gg_ppzksnark.hpp
+@@ -137,11 +137,11 @@ public:
+ 
+     void print_size() const
+     {
+-        libff::print_indent(); printf("* G1 elements in PK: %zu\n", this->G1_size());
+-        libff::print_indent(); printf("* Non-zero G1 elements in PK: %zu\n", this->G1_sparse_size());
+-        libff::print_indent(); printf("* G2 elements in PK: %zu\n", this->G2_size());
+-        libff::print_indent(); printf("* Non-zero G2 elements in PK: %zu\n", this->G2_sparse_size());
+-        libff::print_indent(); printf("* PK size in bits: %zu\n", this->size_in_bits());
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* G1 elements in PK: %zu\n", this->G1_size()); }
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* Non-zero G1 elements in PK: %zu\n", this->G1_sparse_size()); }
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* G2 elements in PK: %zu\n", this->G2_size()); }
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* Non-zero G2 elements in PK: %zu\n", this->G2_sparse_size()); }
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* PK size in bits: %zu\n", this->size_in_bits()); }
+     }
+ 
+     bool operator==(const r1cs_gg_ppzksnark_proving_key<ppT> &other) const;
+@@ -207,10 +207,10 @@ public:
+ 
+     void print_size() const
+     {
+-        libff::print_indent(); printf("* G1 elements in VK: %zu\n", this->G1_size());
+-        libff::print_indent(); printf("* G2 elements in VK: %zu\n", this->G2_size());
+-        libff::print_indent(); printf("* GT elements in VK: %zu\n", this->GT_size());
+-        libff::print_indent(); printf("* VK size in bits: %zu\n", this->size_in_bits());
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* G1 elements in VK: %zu\n", this->G1_size()); }
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* G2 elements in VK: %zu\n", this->G2_size()); }
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* GT elements in VK: %zu\n", this->GT_size()); }
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* VK size in bits: %zu\n", this->size_in_bits()); }
+     }
+ 
+     bool operator==(const r1cs_gg_ppzksnark_verification_key<ppT> &other) const;
+@@ -334,9 +334,9 @@ public:
+ 
+     void print_size() const
+     {
+-        libff::print_indent(); printf("* G1 elements in proof: %zu\n", this->G1_size());
+-        libff::print_indent(); printf("* G2 elements in proof: %zu\n", this->G2_size());
+-        libff::print_indent(); printf("* Proof size in bits: %zu\n", this->size_in_bits());
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* G1 elements in proof: %zu\n", this->G1_size()); }
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* G2 elements in proof: %zu\n", this->G2_size()); }
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* Proof size in bits: %zu\n", this->size_in_bits()); }
+     }
+ 
+     bool is_well_formed() const
+diff --git a/libsnark/zk_proof_systems/ppzksnark/r1cs_gg_ppzksnark/r1cs_gg_ppzksnark.tcc b/libsnark/zk_proof_systems/ppzksnark/r1cs_gg_ppzksnark/r1cs_gg_ppzksnark.tcc
+index 0acb190..183bcd3 100644
+--- a/libsnark/zk_proof_systems/ppzksnark/r1cs_gg_ppzksnark/r1cs_gg_ppzksnark.tcc
++++ b/libsnark/zk_proof_systems/ppzksnark/r1cs_gg_ppzksnark/r1cs_gg_ppzksnark.tcc
+@@ -229,10 +229,10 @@ r1cs_gg_ppzksnark_keypair<ppT> r1cs_gg_ppzksnark_generator(const r1cs_gg_ppzksna
+     /* A quadratic arithmetic program evaluated at t. */
+     qap_instance_evaluation<libff::Fr<ppT> > qap = r1cs_to_qap_instance_map_with_evaluation(r1cs_copy, t);
+ 
+-    libff::print_indent(); printf("* QAP number of variables: %zu\n", qap.num_variables());
+-    libff::print_indent(); printf("* QAP pre degree: %zu\n", r1cs_copy.constraints.size());
+-    libff::print_indent(); printf("* QAP degree: %zu\n", qap.degree());
+-    libff::print_indent(); printf("* QAP number of input variables: %zu\n", qap.num_inputs());
++    if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* QAP number of variables: %zu\n", qap.num_variables()); }
++    if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* QAP pre degree: %zu\n", r1cs_copy.constraints.size()); }
++    if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* QAP degree: %zu\n", qap.degree()); }
++    if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* QAP number of input variables: %zu\n", qap.num_inputs()); }
+ 
+     libff::enter_block("Compute query densities");
+     size_t non_zero_At = 0;
+@@ -299,7 +299,7 @@ r1cs_gg_ppzksnark_keypair<ppT> r1cs_gg_ppzksnark_generator(const r1cs_gg_ppzksna
+     const size_t g1_scalar_size = libff::Fr<ppT>::size_in_bits();
+     const size_t g1_window_size = libff::get_exp_window_size<libff::G1<ppT> >(g1_scalar_count);
+ 
+-    libff::print_indent(); printf("* G1 window: %zu\n", g1_window_size);
++    if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* G1 window: %zu\n", g1_window_size); }
+     libff::window_table<libff::G1<ppT> > g1_table = libff::get_window_table(g1_scalar_size, g1_window_size, g1_generator);
+     libff::leave_block("Generating G1 MSM window table");
+ 
+@@ -309,7 +309,7 @@ r1cs_gg_ppzksnark_keypair<ppT> r1cs_gg_ppzksnark_generator(const r1cs_gg_ppzksna
+     const size_t g2_scalar_size = libff::Fr<ppT>::size_in_bits();
+     size_t g2_window_size = libff::get_exp_window_size<libff::G2<ppT> >(g2_scalar_count);
+ 
+-    libff::print_indent(); printf("* G2 window: %zu\n", g2_window_size);
++    if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("* G2 window: %zu\n", g2_window_size); }
+     libff::window_table<libff::G2<ppT> > g2_table = libff::get_window_table(g2_scalar_size, g2_window_size, G2_gen);
+     libff::leave_block("Generating G2 MSM window table");
+ 
+@@ -597,7 +597,7 @@ bool r1cs_gg_ppzksnark_online_verifier_strong_IC(const r1cs_gg_ppzksnark_process
+ 
+     if (pvk.gamma_ABC_g1.domain_size() != primary_input.size())
+     {
+-        libff::print_indent(); printf("Input length differs from expected (got %zu, expected %zu).\n", primary_input.size(), pvk.gamma_ABC_g1.domain_size());
++        if (!libff::inhibit_profiling_info) { libff::print_indent(); printf("Input length differs from expected (got %zu, expected %zu).\n", primary_input.size(), pvk.gamma_ABC_g1.domain_size()); }
+         result = false;
+     }
+     else

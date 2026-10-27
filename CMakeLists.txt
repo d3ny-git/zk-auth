@@ -18,7 +18,20 @@ if(ZK_SANITIZE)
   add_link_options(-fsanitize=address,undefined)
 endif()
 
-if(NOT EMSCRIPTEN)
+if(EMSCRIPTEN)
+  # Native WebAssembly exception handling: our parsers report bad input by
+  # throwing, and the JS-emulated alternative is several times slower.
+  add_compile_options(-fwasm-exceptions)
+  add_link_options(-fwasm-exceptions)
+endif()
+
+include(Libsnark)
+add_subdirectory(core)
+
+if(EMSCRIPTEN)
+  add_subdirectory(prover-wasm)
+else()
+  add_subdirectory(tools)
   enable_testing()
   add_subdirectory(tests)
 endif()

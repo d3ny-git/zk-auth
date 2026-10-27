@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zk-Auth toy prover</title>
+  <style>body{font:16px/1.5 system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem}pre{background:#f4f4f4;padding:1rem;overflow:auto}</style>
+</head>
+<body>
+  <h1>M1 risk spike: x³ + x + 5 = 35, proved in a Web Worker</h1>
+  <p>libsnark + libff + GMP compiled to WebAssembly produce a Groth16 proof that
+     <code>zkauth-toy verify</code> checks natively.</p>
+  <button id="go">Prove with x = 3</button>
+  <pre id="out">idle</pre>
+  <script type="module">
+    const params = new URLSearchParams(location.search);
+    const pkUrl = new URL(params.get('pk') ?? '../build/m1/toy_pk.bin', location.href).href;
+    const out = document.getElementById('out');
+    function run() {
+      out.textContent = 'proving…';
+      const worker = new Worker('./toy-worker.js', { type: 'module' });
+      worker.onmessage = (e) => {
+        window.__toyResult = e.data;
+        out.textContent = JSON.stringify(e.data, null, 2);
+        worker.terminate();
+      };
+      worker.postMessage({ pkUrl, x: 3 });
+    }
+    document.getElementById('go').onclick = run;
+    if (params.has('auto')) run();
+  </script>
+</body>
+</html>

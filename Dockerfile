@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 # Every base image is pinned by digest; every downloaded source by SHA-256.
 ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:24737cef17f4e22b1977df7d9a05e77c4e28b7da5b8911f8d8ccda136bf3573c
+ARG EMSDK_IMAGE=emscripten/emsdk:6.0.13@sha256:fb7864e398acfda863dfcea78b8bc8adad359fa60c6a0bbeb845931de64aa68a
 
 # ---------------------------------------------------------------------------
 # toolchain: Ubuntu 24.04 + OpenSSL built from source.
@@ -39,3 +40,11 @@ COPY . .
 RUN cmake --preset native-debug \
  && cmake --build --preset native-debug -j${JOBS} \
  && ctest --preset native-debug
+
+# ---------------------------------------------------------------------------
+# wasm-toolchain: pinned Emscripten + the two tools its image lacks
+# (GMP's configure needs m4; our presets use Ninja).
+# ---------------------------------------------------------------------------
+FROM ${EMSDK_IMAGE} AS wasm-toolchain
+RUN apt-get update && apt-get install -y --no-install-recommends m4 ninja-build \
+ && rm -rf /var/lib/apt/lists/*

@@ -1,0 +1,17 @@
+diff --git a/libff/algebra/scalar_multiplication/multiexp.tcc b/libff/algebra/scalar_multiplication/multiexp.tcc
+index 0c85e2b..b8a1039 100755
+--- a/libff/algebra/scalar_multiplication/multiexp.tcc
++++ b/libff/algebra/scalar_multiplication/multiexp.tcc
+@@ -490,9 +490,9 @@ T multi_exp_with_mixed_addition(typename std::vector<T>::const_iterator vec_star
+             ++num_other;
+         }
+     }
+-    print_indent(); printf("* Elements of w skipped: %zu (%0.2f%%)\n", num_skip, 100.*num_skip/(num_skip+num_add+num_other));
+-    print_indent(); printf("* Elements of w processed with special addition: %zu (%0.2f%%)\n", num_add, 100.*num_add/(num_skip+num_add+num_other));
+-    print_indent(); printf("* Elements of w remaining: %zu (%0.2f%%)\n", num_other, 100.*num_other/(num_skip+num_add+num_other));
++    if (!libff::inhibit_profiling_info) { print_indent(); printf("* Elements of w skipped: %zu (%0.2f%%)\n", num_skip, 100.*num_skip/(num_skip+num_add+num_other)); }
++    if (!libff::inhibit_profiling_info) { print_indent(); printf("* Elements of w processed with special addition: %zu (%0.2f%%)\n", num_add, 100.*num_add/(num_skip+num_add+num_other)); }
++    if (!libff::inhibit_profiling_info) { print_indent(); printf("* Elements of w remaining: %zu (%0.2f%%)\n", num_other, 100.*num_other/(num_skip+num_add+num_other)); }
+ 
+     leave_block("Process scalar vector");
+ 
