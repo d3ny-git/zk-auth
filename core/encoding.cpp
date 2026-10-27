@@ -1,5 +1,8 @@
 #include "encoding.hpp"
 
+#include <chrono>
+#include <cstdio>
+
 namespace zk {
 
 namespace {
@@ -76,6 +79,51 @@ std::uint32_t read_u32_be(std::span<const std::uint8_t> four) {
     if (four.size() != 4) throw FormatError("read_u32_be: need 4 bytes");
     return std::uint32_t{four[0]} << 24 | std::uint32_t{four[1]} << 16 |
            std::uint32_t{four[2]} << 8 | std::uint32_t{four[3]};
+}
+
+namespace {
+
+using namespace std::chrono;
+
+std::uint32_t to_days(const year_month_day& ymd) {
+    const auto d = sys_days(ymd).time_since_epoch().count();
+    if (d < 0) throw FormatError("date before 1970-01-01");
+    return static_cast<std::uint32_t>(d);
+}
+
+} // namespace
+
+std::uint32_t days_from_iso_date(std::string_view s) {
+    auto digits = [&](std::size_t from, std::size_t n) {
+        int v = 0;
+        for (std::size_t i = from; i < from + n; ++i) {
+            if (s[i] < '0' || s[i] > '9') throw FormatError("date: expected YYYY-MM-DD");
+            v = v * 10 + (s[i] - '0');
+        }
+        return v;
+    };
+    if (s.size() != 10 || s[4] != '-' || s[7] != '-') throw FormatError("date: expected YYYY-MM-DD");
+    const year_month_day ymd{year{digits(0, 4)}, month{unsigned(digits(5, 2))}, day{unsigned(digits(8, 2))}};
+    if (!ymd.ok()) throw FormatError("date: no such calendar day");
+    return to_days(ymd);
+}
+
+std::string iso_date_from_days(std::uint32_t days) {
+    const year_month_day ymd{sys_days{std::chrono::days{days}}};
+    char buf[16];
+    std::snprintf(buf, sizeof buf, "%04d-%02u-%02u", int(ymd.year()), unsigned(ymd.month()), unsigned(ymd.day()));
+    return buf;
+}
+
+std::uint32_t today_utc_days() {
+    return static_cast<std::uint32_t>(floor<std::chrono::days>(system_clock::now()).time_since_epoch().count());
+}
+
+std::uint32_t age_cutoff_days(std::uint32_t today_days, int years_back) {
+    const year_month_day today{sys_days{std::chrono::days{today_days}}};
+    year_month_day then{today.year() - years{years_back}, today.month(), today.day()};
+    if (!then.ok()) then = year_month_day{year_month_day_last{then.year(), month_day_last{then.month()}}};
+    return to_days(then);
 }
 
 } // namespace zk

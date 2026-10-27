@@ -11,6 +11,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "circuit.hpp"
 #include "encoding.hpp"
 #include "snark.hpp"
 
@@ -50,6 +51,25 @@ json vk_to_json(const VerificationKey& vk, const G1& alpha_g1, const G2& beta_g2
 // unexpected fields are an error, not something to ignore).
 void expect_keys(const json& j, std::initializer_list<const char*> keys);
 const std::string& expect_string(const json& j, const char* key);
+
+// --- credential, Merkle path, public inputs (docs/formats.md) ---------------
+Digest digest_from_hex(std::string_view hex);
+Nonce nonce_from_hex(std::string_view hex);
+
+json credential_to_json(const Credential& c);          // {"secret", "dob": "YYYY-MM-DD"}
+Credential credential_from_json(const json& j);
+json path_to_json(const MerklePath& p, const Digest& root); // {"index", "siblings"[8], "root"}
+MerklePath path_from_json(const json& j, Digest* root = nullptr);
+
+// Named fields (hex) plus "packed": the 8 field elements the verifier uses.
+json public_to_json(const PublicInputs& p);
+// Strict, and checks "packed" against a recomputation from the named fields:
+// otherwise a client could show one set of values and get another verified.
+PublicInputs public_from_json(const json& j);
+
+// Canonical text of a JSON value: object keys sorted, no whitespace. The SIWE
+// statement commits to sha256(canonical(proof) + canonical(public)).
+std::string canonical(const json& j);
 
 // --- binary (libsnark operator<< / operator>>) -----------------------------
 template <class T>

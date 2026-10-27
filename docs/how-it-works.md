@@ -141,11 +141,132 @@ Emscripten `getentropy()`).
 
 ## 4. The circuit, gadget by gadget
 
-*(Written at M2.)*
+`core/circuit.cpp` builds `ZkAuthCircuit` from libsnark's **gadgetlib1**.
+A *gadget* is a C++ object that allocates variables on a shared
+`protoboard` and adds the constraints for one sub-computation. It also knows
+how to fill in (`generate_r1cs_witness`) the values that satisfy them. The
+statement:
+
+> I know `secret`, `dob` and a Merkle path such that
+> `H(secret, pad256(dob))` is a leaf under `merkle_root`,
+> `nullifier = H(secret, site_id)`, and `dob ≤ age_cutoff`.
+
+Measured constraint counts (`zkauth-setup` prints this table):
+
+| Constraints | Component | How it works |
+|---:|---|---|
+| 936 | public inputs: bits → 8 field elements | 928 booleanity constraints + 8 packing equations (below) |
+| 736 | `secret` and `pad256(dob)` bits | 512 booleanity + 224 "this padding bit is 0" |
+| 27,280 | `commitment = H(secret, pad256(dob))` | libsnark's SHA-256 compression gadget |
+| 4,104 | Merkle path wires | 8 direction bits + 8 × 2 × 256 sibling bits, all boolean |
+| 220,294 | Merkle membership | 8 × (H = 27,280 + selector 256) + 6 for root equality |
+| 27,280 | `nullifier = H(secret, site_id)` | same gadget, output wires *are* the public nullifier wires |
+| 40 | `dob ≤ age_cutoff` | 32-bit `comparison_gadget` + "result = 1" |
+| **280,670** | **total** (255,817 variables, 8 public inputs) | ≈ 10 SHA-256 compressions × 27,280 = 272,800 + the rest |
+
+**Booleanity.** A field element is not a bit. To force a variable `b` to be
+0 or 1, the circuit adds `b · (1 − b) = 0`, whose only solutions are 0 and 1.
+Every bit wire in the circuit has this constraint. Without it, a "bit" could
+be 2 and the arithmetic below would silently mean something else.
+
+**Packing.** The verifier's cost grows with the number of public inputs (one
+scalar multiplication each). So the 928 public bits are not exposed one by
+one: `multipacking_gadget` adds one constraint per field element,
+`packed = Σ bitⱼ · 2ʲ`, with up to 253 bits per element (the largest power of
+two that is safely below the 254-bit field size). A 256-bit digest therefore
+becomes 2 elements, and the total is 2 + 2 + 2 + 1 + 1 = 8.
+
+**SHA-256 inside a circuit.** SHA-256 works on 32-bit words with XOR, AND,
+rotations and additions mod 2³². Rotations are free: they only re-wire bits.
+XOR of bits `a, b` is the polynomial `a + b − 2ab` (one constraint), AND is
+`ab`. An addition mod 2³² is done by adding the packed words as field elements
+and then decomposing the sum back into 32 bits plus carries. 64 rounds of this
+cost 27,280 constraints. That is why the circuit is "about ten SHA-256s".
+Note that `H` is the *compression function* only: one block, no padding (see
+[formats.md](formats.md#the-hash-h)).
+
+**Selecting left or right.** At each Merkle level, the node computed so far
+must go to the left or right input of the next hash, depending on a direction
+bit `d`. `digest_selector_gadget` does this with one constraint per bit:
+`(input − left) = d · (right − left)`. With `d = 0` it forces
+`input = left`; with `d = 1`, `input = right`. That is 256 constraints per
+level.
+
+**The age check.** `comparison_gadget(n = 32)` computes `2³² + cutoff − dob`
+and decomposes it into 33 bits; bit 32 is 1 exactly when `dob ≤ cutoff`. One
+more constraint forces that bit to 1. The gadget is only sound if both inputs
+are below 2³². `age_cutoff` gets that from its 32 boolean public bits, and
+`dob` from the 224 constraints that force the top of `pad256(dob)` to zero.
+Without them a prover could pick a `dob` around 2⁵⁰ that wraps around and
+"compares" as small.
+
+**What the circuit cannot do.** It cannot know today's date. Any
+`age_cutoff` the prover picks is internally consistent (a 17-year-old can
+prove `dob ≤ tomorrow`). It is the *server* that pins `age_cutoff` to its own
+value (check 4 in §8). The test "a later cutoff is satisfiable, so the server
+must pin age_cutoff" documents exactly this.
+
+**The nonce** appears in no constraint at all. It is still bound to the proof.
+Groth16's verification equation includes `Σ publicᵢ · ICᵢ`, and libsnark's
+R1CS→QAP reduction adds a dummy constraint `inputᵢ · 0 = 0` for every input,
+so every `ICᵢ` is a non-zero, independent point. Change the nonce and `L`
+changes, so the pairing equation fails. `tests/test_proof.cpp` checks this
+("wrong nonce"), along with the root, nullifier, site_id and cutoff. A
+circuit-only test ("changing the nonce alone keeps the circuit satisfiable")
+shows the constraints themselves do not care.
 
 ## 5. Commitments, Merkle trees and nullifiers
 
-*(Written at M2/M3, with a worked example from the fixtures.)*
+**Commitment.** The issuer cannot publish your date of birth, but it must
+publish *something* the circuit can check against. It publishes
+`commitment = H(secret, pad256(dob))`. Because `secret` is 256 random bits,
+the commitment reveals nothing about `dob` (*hiding*: brute-forcing the ~40,000
+plausible birthdays does not help without the secret). Because SHA-256's
+compression function is collision resistant, you cannot later open it to a
+different `dob` (*binding*).
+
+**Merkle tree.** The issuer puts every commitment in a binary hash tree of
+depth 8 (256 leaves) and publishes only the **root**. To prove "my commitment
+is one of the leaves", you show the 8 sibling hashes on the path from your
+leaf to the root. Inside the circuit those siblings are private, so the server
+learns that *some* leaf matches, not which. The issuer pre-fills the tree with
+20 dummy credentials, so even the first real user hides among 21 leaves.
+
+**Nullifier.** Without one, a single credential could create unlimited
+accounts, and a per-user ID (say, the commitment) would link the same person
+across websites. The nullifier `H(secret, site_id)` is a *per-site
+pseudonym*. On one site it is always the same, so the server can enforce
+"one credential = one account". Different sites get unrelated values, because
+without `secret` nobody can relate `H(secret, a)` to `H(secret, b)`.
+
+Worked example, test fixture credential 0 (`zk_tests "[example]" -s`):
+
+```
+secret        1111111111111111111111111111111111111111111111111111111111111111
+dob           2001-05-14 → 11456 days → pad256 = 00…002cc0
+commitment    H(secret, pad256(dob))  = a55c6c30a851a0bc0bb0fb4dabb0314349a92fea91d40ec910e803efb1595163
+leaf 1        faea4d98d908987850b08d3a3e25f4984426d1983e6c3d6ad04fb94692836374  (= siblings[0])
+siblings[1]   ef615506b7e4fb53fbcabda0d7c11718e430a0c6ef108c8ff1aad6535377f60e  (= H(leaf 2, leaf 3))
+root          7e9034f3dc1518c05f91667d3cea0b5d1e2c87d7b1358e8c9f4880127c918a08
+site_id       5a5a…5a
+nullifier     H(secret, site_id)      = 17f35bff1aac58f073d36556b4f794d1fd0715238ace48800b6c23b8168ae899
+```
+
+The real issuer flow (M3) produced, for a freshly issued credential at leaf 20
+behind 20 dummies:
+
+```
+$ zkauth-issuer check --cred cred.json --path path.json --roots roots.json
+commitment     9064f0eb222040fb7519776992ab79e0bc8f3c3ab7da2cd79df207d4a52e72bd
+computed root  ec375622a18ae9ac48c36bafa71d55dc4f6886dfe03f34255bbdda0d43f03fd6
+path root      ec375622a18ae9ac48c36bafa71d55dc4f6886dfe03f34255bbdda0d43f03fd6
+root published: yes
+OK: the credential's path verifies
+```
+
+What the issuer stores: only the commitments (`issuer.json`) and the roots it
+has published (`roots.json`, which the server loads). Secrets and dates of
+birth are written to the user's `cred.json` and then forgotten.
 
 ## 6. How the browser proves
 
@@ -166,7 +287,15 @@ Proving takes seconds and would freeze the page if it ran on the main thread.
 sends it the inputs with `postMessage` and receives a JSON proof back. The M1
 check confirms the proof really was made in a `DedicatedWorkerGlobalScope`.
 
-*(Proving key size, caching and the real proving time are added at M4.)*
+### What is in the proving key, and why it is big
+
+The proving key is 148.5 MB (see the table in
+[formats.md](formats.md#keys)). Most of it is curve points, one or two per
+circuit variable, which the prover combines with the witness values in large
+**multi-scalar multiplications**. 65 MB of it is the R1CS itself, which the
+prover needs to compute the quotient polynomial `h(x)`.
+
+*(Download, caching and the real proving time: M4.)*
 
 ## 7. Ethereum signatures and address recovery
 

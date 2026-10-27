@@ -150,6 +150,85 @@ json vk_to_json(const VerificationKey& vk, const G1& alpha_g1, const G2& beta_g2
     };
 }
 
+Digest digest_from_hex(std::string_view hex) {
+    Bytes b = from_hex(hex, 32);
+    Digest d;
+    std::copy(b.begin(), b.end(), d.begin());
+    return d;
+}
+
+Nonce nonce_from_hex(std::string_view hex) {
+    Bytes b = from_hex(hex, 16);
+    Nonce n;
+    std::copy(b.begin(), b.end(), n.begin());
+    return n;
+}
+
+json credential_to_json(const Credential& c) {
+    return {{"secret", to_hex(c.secret)}, {"dob", iso_date_from_days(c.dob)}};
+}
+
+Credential credential_from_json(const json& j) {
+    expect_keys(j, {"secret", "dob"});
+    return {digest_from_hex(expect_string(j, "secret")), days_from_iso_date(expect_string(j, "dob"))};
+}
+
+json path_to_json(const MerklePath& p, const Digest& root) {
+    json siblings = json::array();
+    for (const Digest& d : p.siblings) siblings.push_back(to_hex(d));
+    return {{"index", p.index}, {"siblings", siblings}, {"root", to_hex(root)}};
+}
+
+MerklePath path_from_json(const json& j, Digest* root) {
+    expect_keys(j, {"index", "siblings", "root"});
+    const json& idx = j.at("index");
+    if (!idx.is_number_unsigned() || idx.get<std::uint64_t>() >= kNumLeaves)
+        throw FormatError("path: index out of range");
+    MerklePath p;
+    p.index = idx.get<std::uint32_t>();
+    const json& sib = expect_array(j, "siblings", kTreeDepth);
+    for (std::size_t k = 0; k < kTreeDepth; ++k) {
+        if (!sib[k].is_string()) throw FormatError("path: sibling must be hex");
+        p.siblings[k] = digest_from_hex(sib[k].get_ref<const std::string&>());
+    }
+    Digest r = digest_from_hex(expect_string(j, "root"));
+    if (root) *root = r;
+    return p;
+}
+
+json public_to_json(const PublicInputs& p) {
+    json packed = json::array();
+    for (const Fr& f : pack_public_inputs(p)) packed.push_back(fr_to_hex(f));
+    const std::array<std::uint8_t, 4> age{std::uint8_t(p.age_cutoff >> 24), std::uint8_t(p.age_cutoff >> 16),
+                                          std::uint8_t(p.age_cutoff >> 8), std::uint8_t(p.age_cutoff)};
+    return {{"merkle_root", to_hex(p.merkle_root)}, {"nullifier", to_hex(p.nullifier)},
+            {"site_id", to_hex(p.site_id)},         {"age_cutoff", to_hex(age)},
+            {"nonce", to_hex(p.nonce)},             {"packed", packed}};
+}
+
+PublicInputs public_from_json(const json& j) {
+    expect_keys(j, {"merkle_root", "nullifier", "site_id", "age_cutoff", "nonce", "packed"});
+    PublicInputs p;
+    p.merkle_root = digest_from_hex(expect_string(j, "merkle_root"));
+    p.nullifier = digest_from_hex(expect_string(j, "nullifier"));
+    p.site_id = digest_from_hex(expect_string(j, "site_id"));
+    p.age_cutoff = read_u32_be(from_hex(expect_string(j, "age_cutoff"), 4));
+    p.nonce = nonce_from_hex(expect_string(j, "nonce"));
+    const json& packed = expect_array(j, "packed", kNumPublicInputs);
+    const PrimaryInput expected = pack_public_inputs(p);
+    for (std::size_t i = 0; i < kNumPublicInputs; ++i) {
+        if (!packed[i].is_string() || fr_from_hex(packed[i].get_ref<const std::string&>()) != expected[i])
+            throw FormatError("public: packed inputs do not match the named fields");
+    }
+    return p;
+}
+
+std::string canonical(const json& j) {
+    // nlohmann::json stores objects in a std::map, so dump() already emits
+    // keys in sorted order; with no indent argument it emits no whitespace.
+    return j.dump();
+}
+
 std::string read_file(const std::string& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) throw std::runtime_error("cannot open " + path);

@@ -1,25 +1,38 @@
 {
   "version": 6,
-  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "base",
       "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
-      "cacheVariables": { "CMAKE_EXPORT_COMPILE_COMMANDS": "ON" }
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
     },
     {
       "name": "native-debug",
       "inherits": "base",
-      "displayName": "Native debug, ASan + UBSan",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "ZK_SANITIZE": "ON" }
+      "displayName": "Native debug, ASan + UBSan (-O1, as ASan recommends)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ZK_SANITIZE": "ON",
+        "CMAKE_CXX_FLAGS_DEBUG": "-g -O1",
+        "CMAKE_C_FLAGS_DEBUG": "-g -O1"
+      }
     },
     {
       "name": "native-release",
       "inherits": "base",
       "displayName": "Native release (server, CLIs, benchmarks)",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     },
     {
       "name": "native-fuzz",
@@ -45,23 +58,45 @@
     }
   ],
   "buildPresets": [
-    { "name": "native-debug", "configurePreset": "native-debug" },
-    { "name": "native-release", "configurePreset": "native-release" },
-    { "name": "native-fuzz", "configurePreset": "native-fuzz" },
-    { "name": "wasm", "configurePreset": "wasm" }
+    {
+      "name": "native-debug",
+      "configurePreset": "native-debug"
+    },
+    {
+      "name": "native-release",
+      "configurePreset": "native-release"
+    },
+    {
+      "name": "native-fuzz",
+      "configurePreset": "native-fuzz"
+    },
+    {
+      "name": "wasm",
+      "configurePreset": "wasm"
+    }
   ],
   "testPresets": [
     {
       "name": "native-debug",
       "configurePreset": "native-debug",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error" }
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "timeout": 3600
+      }
     },
     {
       "name": "native-release",
       "configurePreset": "native-release",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error" }
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "timeout": 3600
+      }
     }
   ]
 }
