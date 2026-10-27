@@ -153,3 +153,21 @@ TEST_CASE("worked example used in docs/formats.md and how-it-works.md", "[circui
     CHECK(p.siblings[0] == f.tree.leaf(1));
     CHECK(p.siblings[1] == hash2(f.tree.leaf(2), f.tree.leaf(3)));
 }
+
+TEST_CASE("one credential gives unrelated nullifiers on different sites", "[circuit][nullifier]") {
+    // Cross-site linkage: two sites comparing their databases see different
+    // nullifiers for the same person; relating them requires the secret.
+    TreeFixture f;
+    Digest site_a{}, site_b{};
+    site_a.fill(0xa1);
+    site_b.fill(0xb2);
+    const Digest na = nullifier_of(f.creds[0].secret, site_a), nb = nullifier_of(f.creds[0].secret, site_b);
+    CHECK(na != nb);
+    int equal_bits = 0;
+    for (std::size_t i = 0; i < 32; ++i) equal_bits += 8 - __builtin_popcount(na[i] ^ nb[i]);
+    CHECK(equal_bits > 64);  // ~128 expected for unrelated 256-bit values
+    CHECK(equal_bits < 192);
+    // Same site, same credential: same nullifier (that is what makes one account per site work).
+    CHECK(nullifier_of(f.creds[0].secret, site_a) == na);
+    CHECK(nullifier_of(f.creds[1].secret, site_a) != na);
+}

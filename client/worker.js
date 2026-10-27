@@ -4,6 +4,7 @@
 // Messages in:  {type: 'prove', credential, path, server}   (JSON strings)
 //               {type: 'nullifier', secret, siteId}
 //               {type: 'checksum', address}          EIP-55 via OpenSSL KECCAK-256
+//               {type: 'rpc', fn, args}              repack_public | proof_hash | sha256_hex
 // Messages out: {type: 'progress', phase, loaded, total}
 //               {type: 'proved', result}   result = {proof, public, proof_hash, timings}
 //               {type: 'error', message, kind}
@@ -65,6 +66,13 @@ self.onmessage = async ({ data }) => {
     }
     if (data.type === 'checksum') {
       post({ type: 'checksum', result: JSON.parse(prover.checksum_address(data.address)) });
+      return;
+    }
+    if (data.type === 'rpc') { // attack-lab helpers; only these functions are callable
+      if (!['repack_public', 'proof_hash', 'sha256_hex'].includes(data.fn)) throw new Error('not callable');
+      const result = JSON.parse(prover[data.fn](...data.args));
+      if (result.error) throw new Error(result.error);
+      post({ type: 'rpc', result });
       return;
     }
     if (data.type !== 'prove') return;

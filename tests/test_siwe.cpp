@@ -81,6 +81,7 @@ TEST_CASE("malformed SIWE messages are rejected", "[siwe][reject]") {
         {"missing blank line", replace(v, kAddress + "\n\n", kAddress + "\n")},
         {"version 2", replace(v, "Version: 1", "Version: 2")},
         {"hex chain id", replace(v, "Chain ID: 1", "Chain ID: 0x1")},
+        {"chain id with a leading zero (fuzz_siwe finding)", replace(v, "Chain ID: 1", "Chain ID: 01")},
         {"short nonce", replace(v, "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f", "abc123")},
         {"nonce with dash", replace(v, "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f", "0f0f0f0f-0f0f0f0f")},
         {"bad issued-at", replace(v, "2026-10-27T12:00:00.000Z", "yesterday")},

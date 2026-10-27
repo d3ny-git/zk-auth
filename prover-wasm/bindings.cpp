@@ -3,6 +3,8 @@
 //   prove(pk_bytes, credential_json, path_json, public_json) -> proof_json
 //   compute_nullifier(secret_hex, site_id_hex)                -> nullifier_json
 //   checksum_address(address_hex)                              -> {"address": EIP-55}
+//   repack_public(public_json), proof_hash(proof, public), sha256_hex(text)
+//                                                              (attack lab helpers)
 //   version()                                                  -> version_json
 //
 // Every function returns a JSON string. Errors come back as {"error": "..."}
@@ -184,6 +186,35 @@ std::string checksum_address(const std::string& address) {
     });
 }
 
+// Recomputes "packed" from the named public fields (ignoring the given packed
+// values). The attack lab uses it to re-target a proof to other public inputs.
+std::string repack_public(const std::string& public_json) {
+    return guarded([&] {
+        json j = json::parse(public_json);
+        j["packed"] = json::array();
+        PublicInputs p;
+        p.merkle_root = digest_from_hex(expect_string(j, "merkle_root"));
+        p.nullifier = digest_from_hex(expect_string(j, "nullifier"));
+        p.site_id = digest_from_hex(expect_string(j, "site_id"));
+        p.age_cutoff = read_u32_be(from_hex(expect_string(j, "age_cutoff"), 4));
+        p.nonce = nonce_from_hex(expect_string(j, "nonce"));
+        return public_to_json(p);
+    });
+}
+
+// sha256(canonical(proof) || canonical(public)) with OpenSSL, exactly as the server computes it.
+std::string proof_hash(const std::string& proof_json, const std::string& public_json) {
+    return guarded([&] {
+        return json{{"proof_hash", proof_hash_hex(proof_from_json(json::parse(proof_json)),
+                                                  public_from_json(json::parse(public_json)))}};
+    });
+}
+
+// SHA-256 of a UTF-8 string, hex (OpenSSL).
+std::string sha256_hex(const std::string& text) {
+    return guarded([&] { return json{{"sha256", to_hex(sha256(text))}}; });
+}
+
 std::string compute_nullifier(const std::string& secret_hex, const std::string& site_id_hex) {
     return guarded([&] {
         return json{{"nullifier", to_hex(nullifier_of(digest_from_hex(secret_hex), digest_from_hex(site_id_hex)))}};
@@ -226,6 +257,9 @@ EMSCRIPTEN_BINDINGS(zkauth_prover) {
     emscripten::function("prove", &prove);
     emscripten::function("compute_nullifier", &compute_nullifier);
     emscripten::function("checksum_address", &checksum_address);
+    emscripten::function("repack_public", &repack_public);
+    emscripten::function("proof_hash", &proof_hash);
+    emscripten::function("sha256_hex", &sha256_hex);
     emscripten::function("version", &version);
     emscripten::function("toyProve", &toy_prove);
     emscripten::function("debug_witness", &debug_witness);

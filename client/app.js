@@ -110,15 +110,16 @@ $('nonce-btn').onclick = async () => {
 };
 
 // ---------------------------------------------------------------- step 4
-function prove() {
+function prove(server = state.server, quiet = false) {
   return new Promise((resolve, reject) => {
     const started = performance.now();
     const ticker = setInterval(() => {
-      if ($('step-4').dataset.state === 'busy' && $('dl-progress').hidden)
+      if (!quiet && $('step-4').dataset.state === 'busy' && $('dl-progress').hidden)
         show(4, `proving… ${((performance.now() - started) / 1000).toFixed(0)} s`);
     }, 500);
     worker.onmessage = ({ data }) => {
       if (data.type === 'progress') {
+        if (quiet) return;
         if (data.phase === 'download') {
           $('dl-progress').hidden = false;
           $('dl-progress').max = data.total;
@@ -137,7 +138,7 @@ function prove() {
       }
     };
     worker.postMessage({
-      type: 'prove', credential: state.credential, path: state.path, server: JSON.stringify(state.server),
+      type: 'prove', credential: state.credential, path: state.path, server: JSON.stringify(server),
     });
   });
 }
@@ -280,12 +281,110 @@ function showServerView(body) {
     ['the secret (64 hex) does not appear in the body', !body.includes(cred.secret)],
     [`the date of birth (${'•'.repeat(4)}-••-••) does not appear in any form`,
       !body.includes(cred.dob) && !body.includes(days.toString(16).padStart(8, '0')) && !body.includes(`"${days}"`)],
-    ['the Merkle path (leaf index, siblings) is not sent', !JSON.parse(state.path).siblings.some((s) => body.includes(s))],
+    // An all-zero sibling is an empty leaf, a public constant that also shows
+    // up whenever a packed public input happens to be 0; it reveals nothing.
+    ['the Merkle path (non-empty siblings) is not sent',
+      !JSON.parse(state.path).siblings.filter((h) => !/^0+$/.test(h)).some((h) => body.includes(h))],
   ];
   window.__zk.piiChecks = checks;
   setStep(7, checks.every(([, ok]) => ok) ? 'done' : 'error');
   show(7, checks.map(([what, ok]) => `<span class="${ok ? 'ok' : 'bad'}">${ok ? '✓' : '✗'} ${escapeHtml(what)}</span>`).join('\n') +
     `\n<details><summary>exact request body (${body.length} bytes)</summary><pre>${escapeHtml(JSON.stringify(sent, null, 2))}</pre></details>`);
+}
+
+
+// ---------------------------------------------------------------- attack lab
+const rpc = (fn, ...args) => workerCall({ type: 'rpc', fn, args }, 'rpc');
+const freshNonce = async () => (await fetch(`${API}/nonce`)).json();
+const ownAddress = async () => (await workerCall({ type: 'checksum', address: state.address }, 'checksum')).address;
+
+async function signedBody(proof, pub, nonce, claimedAddress) {
+  const { proof_hash } = await rpc('proof_hash', JSON.stringify(proof), JSON.stringify(pub));
+  const message = siweMessage({
+    domain: location.host, address: claimedAddress ?? await ownAddress(),
+    statement: `Log in to Zk-Auth. zk-auth-proof:0x${proof_hash}`, uri: location.origin,
+    chainId: state.chainId, nonce, issuedAt: new Date().toISOString(),
+  });
+  const signature = await window.ethereum.request({ method: 'personal_sign', params: [utf8Hex(message), state.address] });
+  return JSON.stringify({ proof, public: pub, siwe_message: message, signature });
+}
+
+// Re-target the honest proof: a fresh nonce (so check 2 passes), one other
+// change, and a fresh SIWE signature over the new proof hash (so check 3
+// passes). Whatever rejects the request then is the check that matters.
+async function retarget(mutate = (pub) => pub) {
+  const n = await freshNonce();
+  const pub = await rpc('repack_public', JSON.stringify(mutate({ ...state.proved.public, nonce: n.nonce })));
+  return signedBody(state.proved.proof, pub, n.nonce);
+}
+
+const attacks = [
+  {
+    id: 'replay', expect: 'nonce', title: 'Replay the last login request',
+    why: 'Resend the exact bytes of the successful login. Its nonce was deleted when it was used.',
+    body: async () => state.sentBody,
+  },
+  {
+    id: 'nonce', expect: 'groth16', title: 'Move the proof to a fresh nonce',
+    why: 'Fetch a new nonce, put it in the public inputs and sign again. Every cheap check passes, but the proof was made for the old nonce, so the pairing equation fails.',
+    body: () => retarget(),
+  },
+  {
+    id: 'site', expect: 'site-id', title: 'Use the proof for another site',
+    why: 'Swap in site_id = SHA-256("zk-auth:evil.example"), as if the proof had been made for a different website.',
+    body: async () => {
+      const { sha256 } = await rpc('sha256_hex', 'zk-auth:evil.example');
+      return retarget((pub) => ({ ...pub, site_id: sha256 }));
+    },
+  },
+  {
+    id: 'flip', expect: 'body', title: 'Flip one byte of the proof',
+    why: 'Change one hex digit of proof point C. It is no longer on the curve, so the request dies while parsing.',
+    body: async () => {
+      const b = JSON.parse(state.sentBody);
+      const y = b.proof.c.y;
+      b.proof.c.y = y.slice(0, 20) + (y[20] === '1' ? '2' : '1') + y.slice(21);
+      return JSON.stringify(b);
+    },
+  },
+  {
+    id: 'wallet', expect: 'signature', title: 'Claim a different wallet',
+    why: 'Make a fresh, valid proof (≈10 s), then name another address in the SIWE message than the wallet that signs it. Everything up to the pairing check passes.',
+    body: async () => {
+      const n = await freshNonce();
+      const fresh = await prove(n, /*quiet=*/true);
+      const other = state.address.slice(0, -1) + (state.address.endsWith('0') ? '1' : '0');
+      const { address } = await workerCall({ type: 'checksum', address: other }, 'checksum');
+      return signedBody(fresh.proof, fresh.public, n.nonce, address);
+    },
+  },
+];
+
+for (const a of attacks) {
+  const row = document.createElement('div');
+  row.className = 'attack';
+  row.innerHTML = `<strong>${escapeHtml(a.title)}</strong>` +
+    `<span><button class="secondary" id="attack-${a.id}">Run</button> <span class="badge" id="badge-${a.id}">expect: ${a.expect}</span></span>` +
+    `<p>${escapeHtml(a.why)}</p>`;
+  $('attacks').append(row);
+  $(`attack-${a.id}`).onclick = async () => {
+    const badge = $(`badge-${a.id}`);
+    badge.className = 'badge';
+    badge.dataset.state = 'running';
+    badge.textContent = 'running…';
+    try {
+      const r = await postLogin(await a.body());
+      const blocked = r.status !== 200;
+      badge.dataset.check = r.rejectedBy ?? '';
+      badge.className = `badge ${blocked ? 'blocked' : 'passed'}`;
+      badge.textContent = !blocked ? 'NOT BLOCKED'
+        : r.rejectedBy ? `blocked by "${r.rejectedBy}"${r.rejectedBy === a.expect ? '' : ` (expected "${a.expect}")`}`
+        : 'blocked (check hidden in production mode)';
+    } catch (e) {
+      badge.textContent = `error: ${e.message}`;
+    }
+    badge.dataset.state = 'done';
+  };
 }
 
 // The wasm module loads in the worker as soon as the page opens.

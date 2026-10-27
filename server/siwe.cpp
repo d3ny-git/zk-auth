@@ -146,6 +146,8 @@ Message parse(std::string_view text) {
     const std::string_view chain = field(next(), "Chain ID: ");
     if (chain.empty() || chain.size() > 18 || !std::all_of(chain.begin(), chain.end(), [](char c) { return c >= '0' && c <= '9'; }))
         bad("bad chain id");
+    // "01" and "1" would be two signed texts for one chain (found by fuzz_siwe).
+    if (chain.size() > 1 && chain[0] == '0') bad("chain id has leading zeros");
     m.chain_id = std::stoull(std::string(chain));
     m.nonce = std::string(field(next(), "Nonce: "));
     if (m.nonce.size() < 8 || m.nonce.size() > 128 || !std::all_of(m.nonce.begin(), m.nonce.end(), is_alnum))

@@ -1,0 +1,11 @@
+loca80 wants you to sign in with your Ethereum account:
+0xFCAd0B19bB29D4674531d6f115237E16AfCE377c
+
+8
+
+URI: ht://loct:8080
+Version: 1
+Chain ID: 06
+Nonce: 00f0f0f0f
+Issued At: 2026-10-27T12:00:00.0000+00:00
+Request ID: ris

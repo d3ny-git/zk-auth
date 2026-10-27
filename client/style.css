@@ -84,6 +84,7 @@ progress { width: 100%; margin-top: .6rem; }
 
 output { display: block; margin-top: .7rem; font-size: .82rem; white-space: pre-wrap; word-break: break-all; }
 output:empty { display: none; }
+output pre { white-space: pre-wrap; word-break: break-all; margin: .4rem 0; }
 output .ok { color: var(--ok); }
 output .bad { color: var(--bad); }
 output table { border-collapse: collapse; width: 100%; font-size: .8rem; }

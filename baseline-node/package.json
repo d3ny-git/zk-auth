@@ -1,0 +1,19 @@
+{
+  "name": "zk-auth-baseline",
+  "private": true,
+  "type": "module",
+  "description": "Node.js baseline for the Zk-Auth verification endpoints (Fastify + snarkjs + ethers v6)",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "convert": "node convert.mjs"
+  },
+  "dependencies": {
+    "ethers": "6.17.0",
+    "fastify": "5.12.7",
+    "ffjavascript": "0.3.1",
+    "snarkjs": "0.7.6"
+  }
+}

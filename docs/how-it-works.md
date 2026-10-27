@@ -517,7 +517,35 @@ profiling globals are disabled before any thread starts.
 
 ## 9. The attack lab
 
-*(Written at M7.)*
+After a successful login the page shows five attacks. Each one sends a
+deliberately broken `/login`. In development mode the server adds an
+`X-ZkAuth-Reject` header naming the check that caught the attack, and the
+badge shows it. In production mode the header is absent and every failure
+looks identical. `tests/e2e/m7-attack-lab.mjs` clicks all five in headless
+Chrome against the real server and checks each badge.
+
+Most attacks first **re-target** the honest proof: fetch a fresh nonce (so
+check 2 passes), put it and the one tampered value into the public inputs,
+re-pack them, recompute the proof hash, and get the wallet to sign a new SIWE
+message (so check 3 passes). Whatever rejects the request after that is the
+check the attack is really about.
+
+| Attack | What it does | Caught by | Why |
+|---|---|---|---|
+| Replay the last login request | resends the exact bytes of the login that just succeeded | `nonce` (2) | the nonce was deleted the moment it was used |
+| Move the proof to a fresh nonce | new nonce in the public inputs, re-signed | `groth16` (6) | the nonce is a public input; Groth16 binds all of them, so `e(A,B) ≠ e(α,β)·e(L,γ)·e(C,δ)` once `L` changes |
+| Use the proof for another site | `site_id = SHA-256("zk-auth:evil.example")`, re-signed | `site-id` (4) | the server compares `site_id` with its own before doing any expensive work |
+| Flip one byte of the proof | changes one hex digit of `C.y` | `body` (1) | the point is no longer on the curve, so parsing fails closed |
+| Claim a different wallet | a *fresh, valid* proof (~10 s), with a SIWE message naming another address than the signer | `signature` (7) | the address recovered from the signature is the real signer, not the one written in the message |
+
+The C++ test suite goes further. `tests/test_login.cpp` has one section per
+failure path, 26 in all (oversized body, extra field, inconsistent packing,
+unknown/expired/reused nonce, malformed SIWE, wrong domain/scheme/URI/chain,
+stale/future/expired timestamps, mismatched SIWE nonce, missing/wrong/double
+proof tag, other site, later cutoff, unpublished root, stale proof, on-curve
+tamper). Each asserts the exact check that rejects it and the generic error
+body. It also covers re-randomised proofs, nullifier conflicts, sessions,
+and the production mode that hides the check.
 
 ## 10. What the benchmarks show
 
