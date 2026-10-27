@@ -18,6 +18,10 @@ struct Args {
             std::string s = argv[i];
             if (s.starts_with("--")) {
                 s = s.substr(2);
+                if (const auto eq = s.find('='); eq != std::string::npos) { // --key=value
+                    a.opts[s.substr(0, eq)] = s.substr(eq + 1);
+                    continue;
+                }
                 const bool has_value = i + 1 < argc && !std::string(argv[i + 1]).starts_with("--");
                 a.opts[s] = has_value ? argv[++i] : "";
             } else {

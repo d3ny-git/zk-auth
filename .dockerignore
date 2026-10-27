@@ -5,3 +5,6 @@ data/
 client/wasm/
 **/node_modules/
 fuzz-corpus/
+demo/
+fuzz-corpus/
+**/.venv/

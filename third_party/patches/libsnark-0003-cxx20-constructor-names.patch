@@ -1,0 +1,37 @@
+diff --git a/libsnark/gadgetlib1/gadgets/hashes/hash_io.hpp b/libsnark/gadgetlib1/gadgets/hashes/hash_io.hpp
+index 34c89cf..e775628 100644
+--- a/libsnark/gadgetlib1/gadgets/hashes/hash_io.hpp
++++ b/libsnark/gadgetlib1/gadgets/hashes/hash_io.hpp
+@@ -19,11 +19,11 @@ public:
+     size_t digest_size;
+     pb_variable_array<FieldT> bits;
+ 
+-    digest_variable<FieldT>(protoboard<FieldT> &pb,
++    digest_variable(protoboard<FieldT> &pb,
+                             const size_t digest_size,
+                             const std::string &annotation_prefix);
+ 
+-    digest_variable<FieldT>(protoboard<FieldT> &pb,
++    digest_variable(protoboard<FieldT> &pb,
+                             const size_t digest_size,
+                             const pb_variable_array<FieldT> &partial_bits,
+                             const pb_variable<FieldT> &padding,
+diff --git a/libsnark/knowledge_commitment/knowledge_commitment.hpp b/libsnark/knowledge_commitment/knowledge_commitment.hpp
+index bd68d0a..5b0e82b 100644
+--- a/libsnark/knowledge_commitment/knowledge_commitment.hpp
++++ b/libsnark/knowledge_commitment/knowledge_commitment.hpp
+@@ -37,10 +37,10 @@ struct knowledge_commitment {
+     T1 g;
+     T2 h;
+ 
+-    knowledge_commitment<T1,T2>() = default;
+-    knowledge_commitment<T1,T2>(const knowledge_commitment<T1,T2> &other) = default;
+-    knowledge_commitment<T1,T2>(knowledge_commitment<T1,T2> &&other) = default;
+-    knowledge_commitment<T1,T2>(const T1 &g, const T2 &h);
++    knowledge_commitment() = default;
++    knowledge_commitment(const knowledge_commitment<T1,T2> &other) = default;
++    knowledge_commitment(knowledge_commitment<T1,T2> &&other) = default;
++    knowledge_commitment(const T1 &g, const T2 &h);
+ 
+     knowledge_commitment<T1,T2>& operator=(const knowledge_commitment<T1,T2> &other) = default;
+     knowledge_commitment<T1,T2>& operator=(knowledge_commitment<T1,T2> &&other) = default;

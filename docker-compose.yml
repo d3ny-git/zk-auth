@@ -1,0 +1,52 @@
+# docker compose up --build, then open http://localhost:8080
+#   init      one-shot: trusted setup, issuer tree, demo credential in ./demo/
+#   server    zkauth-server (Crow) on the internal network, :8081
+#   web       nginx on http://localhost:8080: client + proving key, /api/ -> server
+#   baseline  Node.js comparison server on http://localhost:8082
+name: zk-auth
+
+services:
+  init:
+    build: { context: ., target: runtime }
+    user: "0:0"            # writes the shared volume and ./demo on the host
+    command: ["zkauth-init"]
+    volumes:
+      - zkdata:/data
+      - ./demo:/demo
+
+  server:
+    build: { context: ., target: runtime }
+    command:
+      - zkauth-server
+      - --port=8081
+      - --domain=localhost:8080
+      - --uri=http://localhost:8080
+      - --vk=/data/keys/vk.bin
+      - --roots=/data/issuer/roots.json
+      - --session-key=/data/server/session_ed25519.pem
+      # development: rejected logins carry X-ZkAuth-Reject (the attack lab
+      # shows it). Use production to hide which check failed.
+      - --mode=development
+    volumes: [zkdata:/data]
+    depends_on:
+      init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  web:
+    build: { context: ., target: web }
+    ports: ["8080:8080"]
+    volumes: [zkdata:/data:ro]
+    depends_on: [server]
+    restart: unless-stopped
+
+  baseline:
+    build: { context: ., target: baseline }
+    environment: { PORT: "8082", WORKERS: "0" }
+    ports: ["8082:8082"]
+    volumes: [zkdata:/data:ro]
+    depends_on:
+      init: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+volumes:
+  zkdata:
