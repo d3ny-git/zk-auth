@@ -77,12 +77,27 @@ an already-applied patch as success, so re-configuring is safe.
 |---|---|---|
 | `libsnark-0001-gate-stdout-prints.patch` | libsnark | The generator, prover and multi-exponentiation `printf` statistics unconditionally (QAP sizes, key sizes, "Elements of w skipped", "Swap is not beneficial", and "Input length differs" on a failed verification). That corrupts CLI JSON on stdout, floods the server log, and becomes a `printf` per rejected proof under load. Each is now wrapped in `if (!libff::inhibit_profiling_info)`, the flag libsnark already uses for its other output. |
 | `libff-0001-gate-stdout-prints.patch` | libff | The same fix for `multi_exp_with_mixed_addition`. |
+| `libsnark-0002-sha256-round-constant-unsigned.patch` | libsnark | **Wrong proofs from the browser.** `sha256_round_function_gadget` stored the round constant in a `long` and used `FieldT(K)`. On wasm32 `long` is 32 bits, so the 32 SHA-256 constants ≥ 2³¹ became *negative* field elements. The wasm-built circuit was self-consistent and even hashed correctly (the error cancels mod 2³²), but its coefficients differed from the native constraint system inside `pk.bin`, starting at constraint 9,922. Every browser proof was invalid. Now `K` is `unsigned long` and built with `FieldT(K, /*is_unsigned=*/true)`. Native output is unchanged, so existing keys stay valid. Found by comparing the wasm and native constraint systems (`debug_witness` export). |
+| `libff-0002-multiexp-asm-volatile-memory.patch` | libff | **Valid proofs rejected by the native verifier.** libsnark's Groth16 verifier computes `Σ publicᵢ·ICᵢ` with libff's Bos–Coster multi-exponentiation, whose heap compares bigints with x86-64 inline asm. That asm was not `volatile` and did not declare that it reads memory (it only receives pointers). GCC 16 at `-O3` reused stale comparison results inside the heap loop, so the accumulation was wrong for about 2/3 of random public inputs (8 of 12 random nonces). The fix: `__asm__ volatile` + `"memory"` clobber. The regression test `tests/test_multiexp.cpp` (500 random public-input vectors, Bos–Coster vs naive) fails without the patch and passes with it. wasm was never affected (no asm there). |
 | `libfqfft-0001-replace-removed-bind1st.patch` | libfqfft | `std::bind1st` was removed in C++17. GCC's libstdc++ still ships it, so the native build worked. Emscripten's libc++ does not, so the wasm build failed. It is replaced by an equivalent lambda. |
 
 No patch was needed for GCC 16 or Clang 22 in C++20 mode for the parts we
 compile. The prompt warned about missing standard headers and deprecated Boost,
 but those affect the parts of libsnark we no longer build (gadgetlib2, the
 profiling binaries, Boost.program_options).
+
+## OpenSSL in the browser
+
+libff includes `<openssl/sha.h>` (for `SHA512_rng`, reachable through the
+Merkle gadget's headers). So the wasm build needs OpenSSL headers, and we use
+the library for real work too: `prover-wasm/build-openssl.sh` cross-compiles
+**libcrypto from the same OpenSSL 3.6.4 source** (`linux-generic32 no-asm
+no-threads no-sock no-dso no-engine no-module …`). The browser computes the
+proof hash that goes into the signed SIWE statement with OpenSSL's
+`EVP_Digest(SHA-256)`, the same call the server makes. One wrinkle:
+`emconfigure` exports `CC` as an absolute path, and OpenSSL's Configure also
+derives a `CROSS_COMPILE` prefix from it, so the generated Makefile's
+`CROSS_COMPILE=` line is blanked.
 
 ## WebAssembly build (`prover-wasm/`)
 
@@ -110,3 +125,4 @@ profiling binaries, Boost.program_options).
 | M1 | Toy circuit x³+x+5=35: 3 constraints. Native prove 2.4 ms, verify 2.5–3.1 ms (includes processing the vk). Wasm: `zkauth_prover.wasm` 485,342 B (toy build), Chrome 156 Web Worker prove 22.3 ms, i.e. about 9× native on this tiny circuit. The browser proof verifies natively. A tampered public input (36 instead of 35) is rejected. |
 | M2 | `ZkAuthCircuit`: **280,670 constraints**, 255,817 variables, 8 public inputs (breakdown in how-it-works §4). Native, single thread: setup 15.0 s, prove 4.57 s, verify < 3.5 ms incl. vk processing. 25 test cases pass in release (49 s) and 24 under ASan + UBSan (191 s). |
 | M3 | `zkauth-setup`: pk.bin 148,499,473 B (65.0 MB of it is the R1CS), vk.bin 1,249 B, vk.json 2,836 B. `zkauth-issuer` tree: 20 dummies + 1 real credential at leaf 20, root `ec375622…3fd6`. The path verifies natively (`zkauth-issuer check`), and a native proof with that credential verifies (`zkauth-prove`: pk load 300 ms, witness 242 ms, prove 4,522 ms). |
+| M4 | Real wasm prover: `zkauth_prover.wasm` 2,443,561 B (libsnark + libff + GMP + OpenSSL libcrypto). Chrome 156 Web Worker, depth-8 circuit: **prove 42.4 s** (witness 1.4 s, key parse 0.64 s; cold download, warm and Cache-API runs all within 0.2 s of each other); native 4.42 s, so 9.6× slower. 12/12 random-nonce wasm proofs and the browser proof verify natively after patches libsnark-0002 and libff-0002. Profile (wasm vs native): QAP/FFT 14.21 s vs 1.50 s; H multiexp 24.76 s vs 2.55 s; A+B+L 3.45 s vs 0.37 s. **Over the 30 s threshold: ⛔ decision pending.** |

@@ -1,0 +1,105 @@
+:root {
+  --bg: #f7f7f5;
+  --card: #ffffff;
+  --ink: #1d1d1b;
+  --muted: #5f5f5a;
+  --line: #deded8;
+  --accent: #2f5bd3;
+  --ok: #1e7a46;
+  --bad: #b3261e;
+  --code-bg: #f0f0ec;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --card: #1c1c1b;
+    --ink: #ececea;
+    --muted: #a3a39d;
+    --line: #34342f;
+    --accent: #7c9cff;
+    --ok: #5cc98a;
+    --bad: #f2867e;
+    --code-bg: #262624;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header, main, footer { max-width: 52rem; margin: 0 auto; padding: 0 1rem; }
+header { padding-top: 2rem; }
+h1 { margin: 0 0 .25rem; font-size: 1.9rem; letter-spacing: -.01em; }
+.lede { color: var(--muted); margin-top: 0; }
+code, pre, textarea, output { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+code { background: var(--code-bg); padding: 0 .25em; border-radius: 3px; font-size: .92em; }
+
+.steps { list-style: none; padding: 0; margin: 1.5rem 0; counter-reset: none; }
+.step {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  margin-bottom: .9rem;
+  opacity: .6;
+  transition: opacity .2s, border-color .2s;
+}
+.step[data-state="active"] { opacity: 1; border-left-color: var(--accent); }
+.step[data-state="busy"] { opacity: 1; border-left-color: var(--accent); }
+.step[data-state="done"] { opacity: 1; border-left-color: var(--ok); }
+.step[data-state="error"] { opacity: 1; border-left-color: var(--bad); }
+.step h2 { margin: 0 0 .3rem; font-size: 1.1rem; display: flex; align-items: center; gap: .55rem; }
+.num {
+  display: inline-grid; place-items: center;
+  width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  background: var(--line); color: var(--ink); font-size: .85rem;
+}
+.step[data-state="active"] .num, .step[data-state="busy"] .num { background: var(--accent); color: #fff; }
+.step[data-state="done"] .num { background: var(--ok); color: #fff; }
+.step[data-state="error"] .num { background: var(--bad); color: #fff; }
+.why { margin: 0 0 .7rem; color: var(--muted); font-size: .95rem; }
+
+button {
+  font: inherit; font-size: .95rem;
+  padding: .45rem .9rem; border-radius: 6px;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer;
+}
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.secondary { background: transparent; color: var(--accent); }
+
+.files { display: flex; flex-wrap: wrap; gap: .6rem 1.2rem; margin-bottom: .5rem; font-size: .92rem; }
+.files label { display: flex; flex-direction: column; gap: .2rem; }
+details { margin: .2rem 0 .7rem; font-size: .92rem; }
+textarea {
+  width: 100%; margin-top: .4rem; font-size: .8rem;
+  background: var(--code-bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: .5rem;
+}
+progress { width: 100%; margin-top: .6rem; }
+
+output { display: block; margin-top: .7rem; font-size: .82rem; white-space: pre-wrap; word-break: break-all; }
+output:empty { display: none; }
+output .ok { color: var(--ok); }
+output .bad { color: var(--bad); }
+output table { border-collapse: collapse; width: 100%; font-size: .8rem; }
+output td { border-top: 1px solid var(--line); padding: .25rem .4rem; vertical-align: top; }
+output td:first-child { color: var(--muted); white-space: nowrap; width: 1%; }
+.stat { font-size: 1.15rem; font-family: system-ui, sans-serif; font-weight: 600; }
+
+.attack-lab { margin: 2rem 0; padding: 1rem 1.1rem; border: 1px dashed var(--line); border-radius: 8px; }
+.attack-lab h2 { margin-top: 0; font-size: 1.1rem; }
+.attack { display: grid; grid-template-columns: 1fr auto; gap: .3rem .8rem; align-items: center;
+  padding: .55rem 0; border-top: 1px solid var(--line); }
+.attack p { margin: 0; color: var(--muted); font-size: .88rem; grid-column: 1 / -1; }
+.badge { font-family: ui-monospace, monospace; font-size: .8rem; padding: .1rem .45rem; border-radius: 4px;
+  border: 1px solid var(--line); }
+.badge.blocked { color: var(--ok); border-color: var(--ok); }
+.badge.passed { color: var(--bad); border-color: var(--bad); }
+
+footer { color: var(--muted); font-size: .85rem; padding-bottom: 2rem; }
+footer a { color: inherit; }

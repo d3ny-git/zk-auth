@@ -71,6 +71,15 @@ PublicInputs public_from_json(const json& j);
 // statement commits to sha256(canonical(proof) + canonical(public)).
 std::string canonical(const json& j);
 
+// SHA-256 via OpenSSL's EVP interface (natively the system libcrypto, in the
+// browser the Emscripten build of the same OpenSSL release).
+Digest sha256(std::string_view data);
+
+// sha256(canonical(proof) || canonical(public)) as hex: the value the signed
+// SIWE statement commits to ("zk-auth-proof:0x<hash>"). Computed over the
+// re-serialised *parsed* values, so only canonical input can match.
+std::string proof_hash_hex(const Proof& proof, const PublicInputs& pub);
+
 // --- binary (libsnark operator<< / operator>>) -----------------------------
 template <class T>
 std::string serialize(const T& value) {

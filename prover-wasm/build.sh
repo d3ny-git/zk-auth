@@ -4,6 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ./prover-wasm/build-gmp.sh "$PWD/build/gmp-wasm"
+./prover-wasm/build-openssl.sh "$PWD/build/openssl-wasm"
 cmake --preset wasm >/dev/null
 cmake --build --preset wasm -j"${JOBS:-4}"
 mkdir -p client/wasm

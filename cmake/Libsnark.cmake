@@ -22,6 +22,8 @@
 #                             browser loads the proving key)
 #   USE_ASM=ON (native) / OFF (wasm) -> USE_ASM
 #   WITH_SUPERCOP=OFF      -> not built (ADSNARK only)
+# libff's SHA512_rng (reachable from the Merkle gadget's headers) needs
+# OpenSSL: the system one natively, an Emscripten build of it in wasm.
 
 set(ZK_LIBSNARK_ROOT "${PROJECT_SOURCE_DIR}/third_party/libsnark")
 
@@ -68,13 +70,23 @@ if(EMSCRIPTEN)
     message(FATAL_ERROR "Emscripten GMP not found under '${ZK_GMP_WASM_PREFIX}'. "
                         "Run prover-wasm/build-gmp.sh first.")
   endif()
-  target_include_directories(zk_libsnark SYSTEM PUBLIC "${ZK_GMP_WASM_PREFIX}/include")
-  target_link_libraries(zk_libsnark PUBLIC "${ZK_GMP_WASM_PREFIX}/lib/libgmp.a")
+  # libcrypto cross-compiled by prover-wasm/build-openssl.sh.
+  set(ZK_OPENSSL_WASM_PREFIX "" CACHE PATH "Install prefix of the Emscripten-built OpenSSL")
+  if(NOT EXISTS "${ZK_OPENSSL_WASM_PREFIX}/lib/libcrypto.a")
+    message(FATAL_ERROR "Emscripten OpenSSL not found under '${ZK_OPENSSL_WASM_PREFIX}'. "
+                        "Run prover-wasm/build-openssl.sh first.")
+  endif()
+  target_include_directories(zk_libsnark SYSTEM PUBLIC
+    "${ZK_GMP_WASM_PREFIX}/include" "${ZK_OPENSSL_WASM_PREFIX}/include")
+  target_link_libraries(zk_libsnark PUBLIC
+    "${ZK_GMP_WASM_PREFIX}/lib/libgmp.a" "${ZK_OPENSSL_WASM_PREFIX}/lib/libcrypto.a")
 else()
   find_path(GMP_INCLUDE_DIR NAMES gmp.h REQUIRED)
   find_library(GMP_LIBRARY NAMES gmp REQUIRED)
+  # OpenSSL >= 3.2 for KECCAK-256 (server); libff also includes its headers.
+  find_package(OpenSSL 3.2 REQUIRED)
   target_include_directories(zk_libsnark SYSTEM PUBLIC "${GMP_INCLUDE_DIR}")
-  target_link_libraries(zk_libsnark PUBLIC "${GMP_LIBRARY}")
+  target_link_libraries(zk_libsnark PUBLIC "${GMP_LIBRARY}" OpenSSL::Crypto)
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
     # libff's hand-written 4-limb Montgomery multiplication (fp_aux.tcc).
     target_compile_definitions(zk_libsnark PUBLIC USE_ASM)

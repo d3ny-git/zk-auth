@@ -53,7 +53,8 @@
       "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "ZK_GMP_WASM_PREFIX": "${sourceDir}/build/gmp-wasm"
+        "ZK_GMP_WASM_PREFIX": "${sourceDir}/build/gmp-wasm",
+        "ZK_OPENSSL_WASM_PREFIX": "${sourceDir}/build/openssl-wasm"
       }
     }
   ],

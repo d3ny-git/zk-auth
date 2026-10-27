@@ -36,7 +36,15 @@ ProveRequest prove_request_from_json(const json& cred, const json& path, const j
 
 ProveResult prove_login(const ProvingKey& pk, const ProveRequest& req);
 
-// {"proof": {...}, "public": {...}, "timings": {...}}
+// Diagnostic: re-runs the Groth16 prover's internal steps with zero blinding
+// and returns each intermediate (H coefficients digest, A/B/H/L multi-
+// exponentiations). Native and wasm results must be identical; this is how
+// cross-platform arithmetic bugs are localised.
+json debug_prover_parts(const ProvingKey& pk, const ProveRequest& req);
+// Diagnostic: for each scalar k (Fr hex), k*G1, k*G2, k^-1 and k*k.
+json debug_arith(const json& scalars);
+
+// {"proof": {...}, "public": {...}, "proof_hash": "<hex>", "timings": {...}}
 json prove_result_to_json(const ProveResult& r);
 
 } // namespace zk

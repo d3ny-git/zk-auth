@@ -1,0 +1,61 @@
+diff --git a/libsnark/gadgetlib1/gadgets/hashes/sha256/sha256_components.hpp b/libsnark/gadgetlib1/gadgets/hashes/sha256/sha256_components.hpp
+index 0465622..ed2887c 100644
+--- a/libsnark/gadgetlib1/gadgets/hashes/sha256/sha256_components.hpp
++++ b/libsnark/gadgetlib1/gadgets/hashes/sha256/sha256_components.hpp
+@@ -78,7 +78,7 @@ public:
+     pb_linear_combination_array<FieldT> g;
+     pb_linear_combination_array<FieldT> h;
+     pb_variable<FieldT> W;
+-    long K;
++    unsigned long K; // zk-auth: was `long`, which is 32-bit on wasm32 and made K >= 2^31 negative
+     pb_linear_combination_array<FieldT> new_a;
+     pb_linear_combination_array<FieldT> new_e;
+ 
+@@ -92,7 +92,7 @@ public:
+                                  const pb_linear_combination_array<FieldT> &g,
+                                  const pb_linear_combination_array<FieldT> &h,
+                                  const pb_variable<FieldT> &W,
+-                                 const long &K,
++                                 const unsigned long &K,
+                                  const pb_linear_combination_array<FieldT> &new_a,
+                                  const pb_linear_combination_array<FieldT> &new_e,
+                                  const std::string &annotation_prefix);
+diff --git a/libsnark/gadgetlib1/gadgets/hashes/sha256/sha256_components.tcc b/libsnark/gadgetlib1/gadgets/hashes/sha256/sha256_components.tcc
+index 69e1782..aa83bc7 100644
+--- a/libsnark/gadgetlib1/gadgets/hashes/sha256/sha256_components.tcc
++++ b/libsnark/gadgetlib1/gadgets/hashes/sha256/sha256_components.tcc
+@@ -149,7 +149,7 @@ sha256_round_function_gadget<FieldT>::sha256_round_function_gadget(protoboard<Fi
+                                                                    const pb_linear_combination_array<FieldT> &g,
+                                                                    const pb_linear_combination_array<FieldT> &h,
+                                                                    const pb_variable<FieldT> &W,
+-                                                                   const long &K,
++                                                                   const unsigned long &K,
+                                                                    const pb_linear_combination_array<FieldT> &new_a,
+                                                                    const pb_linear_combination_array<FieldT> &new_e,
+                                                                    const std::string &annotation_prefix) :
+@@ -213,12 +213,12 @@ void sha256_round_function_gadget<FieldT>::generate_r1cs_constraints()
+     pack_h->generate_r1cs_constraints(false);
+ 
+     this->pb.add_r1cs_constraint(r1cs_constraint<FieldT>(1,
+-                                                         packed_h + sigma1 + choice + K + W + sigma0 + majority,
++                                                         packed_h + sigma1 + choice + FieldT(K, true) + W + sigma0 + majority,
+                                                          unreduced_new_a),
+         FMT(this->annotation_prefix, " unreduced_new_a"));
+ 
+     this->pb.add_r1cs_constraint(r1cs_constraint<FieldT>(1,
+-                                                         packed_d + packed_h + sigma1 + choice + K + W,
++                                                         packed_d + packed_h + sigma1 + choice + FieldT(K, true) + W,
+                                                          unreduced_new_e),
+         FMT(this->annotation_prefix, " unreduced_new_e"));
+ 
+@@ -238,8 +238,8 @@ void sha256_round_function_gadget<FieldT>::generate_r1cs_witness()
+     pack_d->generate_r1cs_witness_from_bits();
+     pack_h->generate_r1cs_witness_from_bits();
+ 
+-    this->pb.val(unreduced_new_a) = this->pb.val(packed_h) + this->pb.val(sigma1) + this->pb.val(choice) + FieldT(K) + this->pb.val(W) + this->pb.val(sigma0) + this->pb.val(majority);
+-    this->pb.val(unreduced_new_e) = this->pb.val(packed_d) + this->pb.val(packed_h) + this->pb.val(sigma1) + this->pb.val(choice) + FieldT(K) + this->pb.val(W);
++    this->pb.val(unreduced_new_a) = this->pb.val(packed_h) + this->pb.val(sigma1) + this->pb.val(choice) + FieldT(K, true) + this->pb.val(W) + this->pb.val(sigma0) + this->pb.val(majority);
++    this->pb.val(unreduced_new_e) = this->pb.val(packed_d) + this->pb.val(packed_h) + this->pb.val(sigma1) + this->pb.val(choice) + FieldT(K, true) + this->pb.val(W);
+ 
+     mod_reduce_new_a->generate_r1cs_witness();
+     mod_reduce_new_e->generate_r1cs_witness();

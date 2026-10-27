@@ -1,0 +1,52 @@
+--- a/libff/algebra/scalar_multiplication/multiexp.tcc
++++ b/libff/algebra/scalar_multiplication/multiexp.tcc
+@@ -42,7 +42,7 @@
+         if (n == 3)
+         {
+             long res;
+-            __asm__
++            __asm__ volatile
+                 ("// check for overflow           \n\t"
+                  "mov $0, %[res]                  \n\t"
+                  ADD_CMP(16)
+@@ -54,13 +54,13 @@
+                  "done%=:                         \n\t"
+                  : [res] "=&r" (res)
+                  : [A] "r" (other.r.data), [mod] "r" (this->r.data)
+-                 : "cc", "%rax");
++                 : "cc", "memory", "%rax"); // zk-auth: the asm reads *this and other through pointers
+             return res;
+         }
+         else if (n == 4)
+         {
+             long res;
+-            __asm__
++            __asm__ volatile
+                 ("// check for overflow           \n\t"
+                  "mov $0, %[res]                  \n\t"
+                  ADD_CMP(24)
+@@ -73,13 +73,13 @@
+                  "done%=:                         \n\t"
+                  : [res] "=&r" (res)
+                  : [A] "r" (other.r.data), [mod] "r" (this->r.data)
+-                 : "cc", "%rax");
++                 : "cc", "memory", "%rax"); // zk-auth: the asm reads *this and other through pointers
+             return res;
+         }
+         else if (n == 5)
+         {
+             long res;
+-            __asm__
++            __asm__ volatile
+                 ("// check for overflow           \n\t"
+                  "mov $0, %[res]                  \n\t"
+                  ADD_CMP(32)
+@@ -93,7 +93,7 @@
+                  "done%=:                         \n\t"
+                  : [res] "=&r" (res)
+                  : [A] "r" (other.r.data), [mod] "r" (this->r.data)
+-                 : "cc", "%rax");
++                 : "cc", "memory", "%rax"); // zk-auth: the asm reads *this and other through pointers
+             return res;
+         }
+         else

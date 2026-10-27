@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zk-Auth login</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Zk-Auth</h1>
+    <p class="lede">Prove you are over 18 and hold an issuer's credential, without revealing
+      your date of birth, your credential, or which credential it is. Every step runs in this
+      tab; watch each one light up.</p>
+  </header>
+
+  <main>
+    <ol class="steps">
+      <li class="step" id="step-1" data-state="active">
+        <h2><span class="num">1</span> Load credential</h2>
+        <p class="why">Your <code>cred.json</code> (secret + date of birth) and <code>path.json</code>
+          (Merkle path) from the issuer. They are kept in memory only, never stored and never sent.</p>
+        <div class="files">
+          <label>cred.json <input type="file" id="cred-file" accept=".json,application/json"></label>
+          <label>path.json <input type="file" id="path-file" accept=".json,application/json"></label>
+        </div>
+        <details>
+          <summary>…or paste them</summary>
+          <textarea id="cred-text" rows="4" placeholder='{"secret": "…", "dob": "2001-05-14"}' spellcheck="false"></textarea>
+          <textarea id="path-text" rows="4" placeholder='{"index": 20, "siblings": […], "root": "…"}' spellcheck="false"></textarea>
+        </details>
+        <button id="load-btn">Load</button>
+        <output id="out-1"></output>
+      </li>
+
+      <li class="step" id="step-2">
+        <h2><span class="num">2</span> Connect wallet</h2>
+        <p class="why">Your Ethereum address becomes your account on this site. The wallet will later
+          sign one message; it never sees your credential.</p>
+        <button id="wallet-btn" disabled>Connect MetaMask</button>
+        <output id="out-2"></output>
+      </li>
+
+      <li class="step" id="step-3">
+        <h2><span class="num">3</span> Get a nonce</h2>
+        <p class="why">The server hands out a one-time number (valid 120 s), today's age cutoff and its
+          site ID. All three go into the proof, so it cannot be replayed elsewhere or later.</p>
+        <button id="nonce-btn" disabled>GET /nonce</button>
+        <output id="out-3"></output>
+      </li>
+
+      <li class="step" id="step-4">
+        <h2><span class="num">4</span> Prove (in a Web Worker)</h2>
+        <p class="why">libsnark, compiled to WebAssembly, builds a Groth16 proof of
+          "my credential is in the issuer's tree, I was born on or before the cutoff". The proving key
+          (~150 MB) is downloaded once and cached.</p>
+        <button id="prove-btn" disabled>Prove</button>
+        <progress id="dl-progress" hidden></progress>
+        <output id="out-4"></output>
+      </li>
+
+      <li class="step" id="step-5">
+        <h2><span class="num">5</span> Sign in with Ethereum</h2>
+        <p class="why">An EIP-4361 message whose statement carries the proof's hash, signed with
+          <code>personal_sign</code>. This ties the proof to your wallet.</p>
+        <button id="sign-btn" disabled>Sign</button>
+        <output id="out-5"></output>
+      </li>
+
+      <li class="step" id="step-6">
+        <h2><span class="num">6</span> Log in</h2>
+        <p class="why"><code>POST /login</code> runs the server's check chain and returns a session
+          token, which is then used to call <code>GET /me</code>.</p>
+        <button id="login-btn" disabled>POST /login</button>
+        <output id="out-6"></output>
+      </li>
+
+      <li class="step" id="step-7">
+        <h2><span class="num">7</span> What the server saw</h2>
+        <p class="why">The exact request body sent to <code>/login</code>.</p>
+        <output id="out-7"></output>
+      </li>
+    </ol>
+
+    <section class="attack-lab" id="attack-lab" hidden>
+      <h2>Attack lab</h2>
+      <p class="why">Each button sends a deliberately broken login. Every one must be rejected; the
+        badge shows which server check caught it (debug header, development mode only).</p>
+      <div id="attacks"></div>
+    </section>
+  </main>
+
+  <footer>
+    <a href="https://github.com/scipr-lab/libsnark">libsnark</a> · Groth16 over BN254 ·
+    <span id="prover-version">prover loading…</span>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

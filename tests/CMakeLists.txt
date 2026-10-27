@@ -10,7 +10,8 @@ add_executable(zk_tests
   test_encoding.cpp
   test_formats.cpp
   test_circuit.cpp
-  test_proof.cpp)
+  test_proof.cpp
+  test_multiexp.cpp)
 target_link_libraries(zk_tests PRIVATE zk::core OpenSSL::Crypto Catch2::Catch2WithMain)
 target_compile_options(zk_tests PRIVATE -Wall -Wextra)
 

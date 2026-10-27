@@ -1,6 +1,8 @@
 #include "formats.hpp"
 
 #include <fstream>
+
+#include <openssl/evp.h>
 #include <iterator>
 
 namespace zk {
@@ -227,6 +229,18 @@ std::string canonical(const json& j) {
     // nlohmann::json stores objects in a std::map, so dump() already emits
     // keys in sorted order; with no indent argument it emits no whitespace.
     return j.dump();
+}
+
+Digest sha256(std::string_view data) {
+    Digest out;
+    unsigned int len = 0;
+    if (EVP_Digest(data.data(), data.size(), out.data(), &len, EVP_sha256(), nullptr) != 1 || len != out.size())
+        throw std::runtime_error("EVP_Digest(SHA-256) failed");
+    return out;
+}
+
+std::string proof_hash_hex(const Proof& proof, const PublicInputs& pub) {
+    return to_hex(sha256(canonical(proof_to_json(proof)) + canonical(public_to_json(pub))));
 }
 
 std::string read_file(const std::string& path) {
