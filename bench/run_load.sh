@@ -61,17 +61,21 @@ run_cpp() { # config threads
 }
 
 run_node() { # config workers
-    $DOCKER run -d --rm --name zk-baseline --network host --cpuset-cpus "$SERVER_CPUS" \
+    $DOCKER run -d --rm --name "zk-baseline-$1" --network host --cpuset-cpus "$SERVER_CPUS" \
         -e PORT=8082 -e HOST=127.0.0.1 -e WORKERS="$2" -e VK=/res/verification_key.json \
         -v "$PWD/baseline-node:/app:ro" -v "$RES:/res:ro" -w /app "$NODE_IMAGE" node server.mjs >/dev/null
     wait_health http://127.0.0.1:8082
     measure "$1" http://127.0.0.1:8082
-    $DOCKER stop zk-baseline >/dev/null
+    $DOCKER stop "zk-baseline-$1" >/dev/null
 }
 
 echo "server CPUs $SERVER_CPUS, load CPUs $LOAD_CPUS, N=$N, $DURATION per run"
-run_cpp cpp-1 1
-run_cpp "cpp-$N" "$N"
-run_node node-1 0
-run_node "node-$N" "$N"
+CONFIGS=${CONFIGS:-"cpp-1 cpp-$N node-1 node-$N"} # e.g. CONFIGS=node-12 to redo one
+for c in $CONFIGS; do
+    case $c in
+        cpp-*) run_cpp "$c" "${c#cpp-}" ;;
+        node-1) run_node node-1 0 ;;
+        node-*) run_node "$c" "${c#node-}" ;;
+    esac
+done
 echo "results in $RES/load"

@@ -1,0 +1,12 @@
+impl,op,p50_us,p99_us,mean_us
+C++,groth16_verify/processed_vk,2300.1,2409.7,2302.6
+C++,groth16_verify/unprocessed_vk,2651.4,2755.2,2652.6
+C++,proof_json_parse,479.3,494.7,479.2
+C++,endpoint/verify_proof,2792.7,2883.8,2795.3
+C++,ecrecover/reused_contexts,218.5,240.8,219.3
+C++,ecrecover/fresh_contexts,226.9,250.4,227.8
+C++,endpoint/verify_sig,224.2,245.8,224.9
+Node,groth16_verify/cached_curve,6733.9,8207.2,6879.6
+Node,groth16_verify/snarkjs_default,9498.9,14365.7,9784.8
+Node,endpoint/verify_proof,6695.6,10554.1,6902.9
+Node,ecrecover/ethers_verifyMessage,1120.1,1465.9,1134.2

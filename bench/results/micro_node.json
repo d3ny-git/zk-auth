@@ -1,0 +1,27 @@
+{
+  "node": "v24.22.1",
+  "groth16_verify/cached_curve": {
+    "n": 1000,
+    "p50_us": 6733.891,
+    "p99_us": 8207.156,
+    "mean_us": 6879.601104000001
+  },
+  "groth16_verify/snarkjs_default": {
+    "n": 300,
+    "p50_us": 9498.944,
+    "p99_us": 14365.689,
+    "mean_us": 9784.798846666665
+  },
+  "endpoint/verify_proof": {
+    "n": 1000,
+    "p50_us": 6695.589,
+    "p99_us": 10554.144,
+    "mean_us": 6902.927020999996
+  },
+  "ecrecover/ethers_verifyMessage": {
+    "n": 3000,
+    "p50_us": 1120.097,
+    "p99_us": 1465.945,
+    "mean_us": 1134.2401140000013
+  }
+}
